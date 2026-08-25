@@ -6,6 +6,8 @@ import org.springframework.stereotype.Service;
 import com.renewmate.auth.dto.LoginRequest;
 import com.renewmate.auth.dto.LoginResponse;
 import com.renewmate.auth.dto.SignupRequest;
+import com.renewmate.global.exception.BusinessException;
+import com.renewmate.global.exception.ErrorCode;
 import com.renewmate.global.security.JwtProvider;
 import com.renewmate.user.entity.User;
 import com.renewmate.user.repository.UserRepository;
@@ -27,11 +29,11 @@ public class AuthService {
 		
 		// 이메일 중복 확인
 		if(userRepository.existsByEmail(request.email())) {
-			throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+			throw new BusinessException(ErrorCode.DUPLICATE_EMAIL);
 		}
 		// 비밀번호 중복 확인
 		if(!request.password().equals(request.passwordConfirm())) {
-			throw new IllegalArgumentException("비밀번호가 일치하지 않습니다"); 
+			throw new BusinessException(ErrorCode.PASSWORD_MISMATCH); 
 		}
 		// 비밀번호 암호화
 		String encodedPassword = passwordEncoder.encode(request.password());
@@ -46,11 +48,11 @@ public class AuthService {
 		
 		User user = userRepository.findByEmail(request.email())
 				.orElseThrow(() -> 
-						new IllegalArgumentException("이메일 또는 비밀번호가 일치하지 않습니다")
+						new BusinessException(ErrorCode.INVALID_LOGIN)
 					);
 		
 		if (!passwordEncoder.matches(request.password(), user.getPassword())) {
-			throw new IllegalArgumentException("이메일 또는 비밀번호가 일치하지 않습니다");
+			throw new BusinessException(ErrorCode.INVALID_LOGIN);
 		}
 		
 		String accessToken = jwtProvider.createAccessToken(
