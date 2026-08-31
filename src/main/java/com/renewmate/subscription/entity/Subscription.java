@@ -149,6 +149,11 @@ public class Subscription {
 	    this.memo = memo;
 	    this.updatedAt = LocalDateTime.now();
 	}
+	
+	public void changeStatus(SubscriptionStatus status) {
+		this.status = status;
+		this.updatedAt = LocalDateTime.now();
+	}
 
 }
 
