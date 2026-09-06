@@ -12,6 +12,7 @@ import com.renewmate.subscription.dto.SubscriptionResponse;
 import com.renewmate.subscription.entity.Subscription;
 import com.renewmate.subscription.entity.SubscriptionStatus;
 import com.renewmate.subscription.repository.SubscriptionRepository;
+import com.renewmate.subscription.util.SubscriptionAmountCalculator;
 
 import lombok.RequiredArgsConstructor;
 
@@ -20,6 +21,7 @@ import lombok.RequiredArgsConstructor;
 public class DashboardService {
 
     private final SubscriptionRepository subscriptionRepository;
+    private final SubscriptionAmountCalculator subscriptionAmountCalculator;
 
     @Transactional(readOnly = true)
     public DashboardSummaryResponse getSummary(Long userId) {
@@ -31,7 +33,7 @@ public class DashboardService {
                 );
 
         BigDecimal monthlyExpectedAmount = activeSubscriptions.stream()
-                .map(this::calculateMonthlyAmount)
+                .map(subscriptionAmountCalculator::calculateMonthlyAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal annualExpectedAmount = monthlyExpectedAmount
@@ -56,43 +58,6 @@ public class DashboardService {
                 annualExpectedAmount,
                 upcomingPaymentCount
         );
-    }
-
-    private BigDecimal calculateMonthlyAmount(Subscription subscription) {
-
-        BigDecimal amount = subscription.getAmount();
-        int interval = subscription.getBillingInterval();
-
-        return switch (subscription.getBillingCycle()) {
-
-            case WEEKLY ->
-                    amount
-                            .multiply(BigDecimal.valueOf(52))
-                            .divide(BigDecimal.valueOf(12));
-
-            case MONTHLY ->
-                    amount.divide(BigDecimal.valueOf(interval));
-
-            case BIMONTHLY ->
-                    amount.divide(
-                            BigDecimal.valueOf(2L * interval)
-                    );
-
-            case QUARTERLY ->
-                    amount.divide(
-                            BigDecimal.valueOf(3L * interval)
-                    );
-
-            case SEMIANNUAL ->
-                    amount.divide(
-                            BigDecimal.valueOf(6L * interval)
-                    );
-
-            case YEARLY ->
-                    amount.divide(
-                            BigDecimal.valueOf(12L * interval)
-            );
-        };
     }
     
     @Transactional(readOnly = true)

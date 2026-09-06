@@ -10,6 +10,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 
 public record SubscriptionUpdateRequest(
 
@@ -36,13 +37,17 @@ public record SubscriptionUpdateRequest(
         @NotNull(message = "자동 갱신 여부는 필수입니다.")
         Boolean autoRenew,
 
+        @PositiveOrZero
         Integer reminderDays,
         
         String paymentMethod,
         
         String serviceUrl,
         
-        String memo
+        String memo,
+        
+        @Positive
+        Long categoryId
 
 	) {
 }

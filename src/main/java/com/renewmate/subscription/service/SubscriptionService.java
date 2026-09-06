@@ -6,6 +6,8 @@ import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.renewmate.category.entity.Category;
+import com.renewmate.category.repository.CategoryRepository;
 import com.renewmate.global.exception.BusinessException;
 import com.renewmate.global.exception.ErrorCode;
 import com.renewmate.subscription.dto.SubscriptionCreateRequest;
@@ -27,6 +29,7 @@ public class SubscriptionService {
 	
 	private final SubscriptionRepository subscriptionRepository;
 	private final UserRepository userRepository;
+	private final CategoryRepository categoryRepository;
 	
 	@Transactional
 	public void createSubscription(Long userId,	SubscriptionCreateRequest request) {
@@ -39,8 +42,15 @@ public class SubscriptionService {
 				request.billingInterval()
 		);
 		
+		Category category = categoryRepository
+		        .findByCategoryIdAndActiveTrue(request.categoryId())
+		        .orElseThrow(() ->
+		                new BusinessException(ErrorCode.CATEGORY_NOT_FOUND)
+		        );
+		
 		Subscription subscription = Subscription.create(
 				user,
+				category,
                 request.serviceName(),
                 request.amount(),
                 request.currency(),
@@ -164,15 +174,14 @@ public class SubscriptionService {
 	) {
 	    Subscription subscription =
 	            subscriptionRepository
-	                    .findBySubscriptionIdAndUser_UserId(
-	                            subscriptionId,
-	                            userId
-	                    )
-	                    .orElseThrow(() ->
-	                            new BusinessException(
-	                                    ErrorCode.SUBSCRIPTION_NOT_FOUND
-	                            )
-	                    );
+	                    .findBySubscriptionIdAndUser_UserId(subscriptionId, userId)
+	                    .orElseThrow(() -> new BusinessException(ErrorCode.SUBSCRIPTION_NOT_FOUND));
+	    
+	    Category category = categoryRepository
+	            .findByCategoryIdAndActiveTrue(request.categoryId())
+	            .orElseThrow(() ->
+	                    new BusinessException(ErrorCode.CATEGORY_NOT_FOUND)
+	            );
 
 	    LocalDate nextBillingDate = calculateNextBillingDate(
 	            request.startDate(),
@@ -181,6 +190,7 @@ public class SubscriptionService {
 	    );
 
 	    subscription.update(
+	    		category,
 	            request.serviceName(),
 	            request.amount(),
 	            request.currency(),
@@ -222,8 +232,7 @@ public class SubscriptionService {
 			subscription.changeStatus(request.status());
 		
 	}
-	
-	// 
+	 
 	@Transactional
 	public List<SubscriptionResponse> getUpcomingSubscriptions(Long userId, int days){
 		LocalDate today = LocalDate.now();

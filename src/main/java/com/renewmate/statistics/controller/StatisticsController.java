@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.renewmate.statistics.dto.CategoryStatisticsResponse;
 import com.renewmate.statistics.dto.ServiceStatisticsResponse;
 import com.renewmate.statistics.dto.StatisticsSummaryResponse;
 import com.renewmate.statistics.service.StatisticsService;
@@ -36,6 +37,17 @@ public class StatisticsController {
         Long userId = (Long) authentication.getPrincipal();
 
         StatisticsSummaryResponse response = statisticsService.getSummary(userId);
+
+        return ResponseEntity.ok(response);
+    }
+    
+    @GetMapping("/categories")
+    public ResponseEntity<List<CategoryStatisticsResponse>>
+            getCategoryStatistics(Authentication authentication) {
+
+        Long userId = (Long) authentication.getPrincipal();
+
+        List<CategoryStatisticsResponse> response = statisticsService.getCategoryStatistics(userId);
 
         return ResponseEntity.ok(response);
     }

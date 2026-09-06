@@ -5,6 +5,7 @@ import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -23,11 +24,14 @@ import com.renewmate.subscription.dto.SubscriptionUpdateRequest;
 import com.renewmate.subscription.service.SubscriptionService;
 
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/subscriptions")
 @RequiredArgsConstructor
+@Validated
 public class SubscriptionController {
 	private final SubscriptionService subscriptionService;
 	
@@ -107,7 +111,7 @@ public class SubscriptionController {
 	
 	@GetMapping("/upcoming")
 	public ResponseEntity<List<SubscriptionResponse>> getUpcomingSubscriptions(Authentication authentication,
-	        @RequestParam(name = "days", defaultValue = "7") int days) {
+			@RequestParam(name = "days", defaultValue = "7") @Min(1) @Max(365) int days) {
 		
 	    Long userId = (Long) authentication.getPrincipal();
 

@@ -62,4 +62,14 @@ public class User {
 		return user;
 	}
 	
+	public void updateName(String name) {
+	    this.name = name;
+	    this.updatedAt = LocalDateTime.now();
+	}
+	
+	public void updatePassword(String encodedPassword) {
+	    this.password = encodedPassword;
+	    this.updatedAt = LocalDateTime.now();
+	}
+	
 }
