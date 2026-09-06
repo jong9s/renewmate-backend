@@ -4,6 +4,7 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
+import com.renewmate.category.entity.Category;
 import com.renewmate.user.entity.User;
 
 import jakarta.persistence.Column;
@@ -84,8 +85,13 @@ public class Subscription {
 	@Column(name = "updated_at", nullable = false)
 	private LocalDateTime updatedAt;
 	
+	@ManyToOne(fetch = FetchType.LAZY)
+	@JoinColumn(name = "category_id")
+	private Category category;
+	
 	public static Subscription create(
 	        User user,
+	        Category category,
 	        String serviceName,
 	        BigDecimal amount,
 	        Currency currency,
@@ -102,6 +108,7 @@ public class Subscription {
 	    Subscription subscription = new Subscription();
 
 	    subscription.user = user;
+	    subscription.category = category;
 	    subscription.serviceName = serviceName;
 	    subscription.amount = amount;
 	    subscription.currency = currency;
@@ -122,6 +129,7 @@ public class Subscription {
 	}
 	
 	public void update(
+			Category category,
 	        String serviceName,
 	        BigDecimal amount,
 	        Currency currency,
@@ -135,6 +143,7 @@ public class Subscription {
 	        String serviceUrl,
 	        String memo
 	) {
+		this.category = category;
 	    this.serviceName = serviceName;
 	    this.amount = amount;
 	    this.currency = currency;

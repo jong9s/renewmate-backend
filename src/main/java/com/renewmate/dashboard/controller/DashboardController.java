@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
@@ -13,11 +14,14 @@ import com.renewmate.dashboard.dto.DashboardSummaryResponse;
 import com.renewmate.dashboard.service.DashboardService;
 import com.renewmate.subscription.dto.SubscriptionResponse;
 
+import jakarta.validation.constraints.Max;
+import jakarta.validation.constraints.Min;
 import lombok.RequiredArgsConstructor;
 
 @RestController
 @RequestMapping("/api/dashboard")
 @RequiredArgsConstructor
+@Validated
 public class DashboardController {
 
     private final DashboardService dashboardService;
@@ -34,8 +38,7 @@ public class DashboardController {
     
     @GetMapping("/upcoming")
     public ResponseEntity<List<SubscriptionResponse>> getUpcoming(Authentication authentication,
-            @RequestParam(name = "limit", defaultValue = "5") int limit
-    ) {
+    		@RequestParam(name = "limit", defaultValue = "5") @Min(1) @Max(50) int limit) {
         Long userId = (Long) authentication.getPrincipal();
 
         List<SubscriptionResponse> response =

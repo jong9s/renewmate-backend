@@ -9,6 +9,8 @@ import com.renewmate.subscription.entity.Subscription;
 import com.renewmate.subscription.entity.SubscriptionStatus;
 
 public record SubscriptionResponse(
+		Long categoryId,
+		String categoryName,
         Long subscriptionId,
         String serviceName,
         BigDecimal amount,
@@ -26,6 +28,8 @@ public record SubscriptionResponse(
 	) {
     public static SubscriptionResponse from(Subscription subscription) {
         return new SubscriptionResponse(
+        		subscription.getCategory().getCategoryId(),
+        		subscription.getCategory().getName(),
                 subscription.getSubscriptionId(),
                 subscription.getServiceName(),
                 subscription.getAmount(),
