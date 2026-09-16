@@ -1,0 +1,11 @@
+.gradle
+build
+.git
+.gitignore
+.idea
+.project
+.classpath
+.settings
+bin
+out
+*.log
