@@ -27,7 +27,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION}
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     networks:
       - renewmate-network
 
