@@ -10,6 +10,7 @@ import com.renewmate.category.entity.Category;
 import com.renewmate.category.repository.CategoryRepository;
 import com.renewmate.global.exception.BusinessException;
 import com.renewmate.global.exception.ErrorCode;
+import com.renewmate.notification.repository.NotificationRepository;
 import com.renewmate.subscription.dto.SubscriptionCreateRequest;
 import com.renewmate.subscription.dto.SubscriptionResponse;
 import com.renewmate.subscription.dto.SubscriptionStatusUpdateRequest;
@@ -30,6 +31,7 @@ public class SubscriptionService {
 	private final SubscriptionRepository subscriptionRepository;
 	private final UserRepository userRepository;
 	private final CategoryRepository categoryRepository;
+	private final NotificationRepository notificationRepository;
 	
 	@Transactional
 	public void createSubscription(Long userId,	SubscriptionCreateRequest request) {
@@ -208,18 +210,18 @@ public class SubscriptionService {
 	
 	@Transactional
 	public void deleteSubscription(Long userId, Long subscriptionId) {
-	    Subscription subscription =
-	            subscriptionRepository
-	                    .findBySubscriptionIdAndUser_UserId(
-	                            subscriptionId,
-	                            userId
-	                    )
-	                    .orElseThrow(() ->
-	                            new BusinessException(
-	                                    ErrorCode.SUBSCRIPTION_NOT_FOUND
-	                            )
-	                    );
 
+	    // 1. 현재 사용자가 소유한 구독인지 확인
+	    Subscription subscription = subscriptionRepository
+	            .findBySubscriptionIdAndUser_UserId(subscriptionId, userId)
+	            .orElseThrow(() ->
+	                    new BusinessException(ErrorCode.SUBSCRIPTION_NOT_FOUND)
+	            );
+
+	    // 2. 구독과 연결된 알림 먼저 삭제
+	    notificationRepository.deleteAllByUser_UserIdAndSubscription_SubscriptionId(userId, subscriptionId);
+
+	    // 3. 구독 삭제
 	    subscriptionRepository.delete(subscription);
 	}
 	
