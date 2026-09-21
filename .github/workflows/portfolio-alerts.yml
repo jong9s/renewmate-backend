@@ -1,0 +1,46 @@
+name: Portfolio Alerts
+
+on:
+  workflow_run:
+    workflows: [Backend CI]
+    types: [completed]
+  schedule:
+    - cron: '17 */6 * * *'
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'Notification test or external health check (requires approval)'
+        type: choice
+        options: [test, health]
+        default: test
+
+permissions:
+  contents: read
+
+jobs:
+  notify:
+    if: >-
+      vars.MONITORING_ENABLED == 'true' &&
+      (github.event_name != 'workflow_dispatch' ||
+       github.ref_name == github.event.repository.default_branch) &&
+      (github.event_name != 'workflow_run' ||
+       github.event.workflow_run.conclusion == 'failure' ||
+       github.event.workflow_run.conclusion == 'timed_out') &&
+      (github.event_name != 'schedule' || vars.HEALTHCHECK_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      # Never execute code/artifacts from the failed PR with the Slack secret.
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+      - name: Test notification logic without network calls
+        run: python3 -B -m unittest discover -s ops/automation -p 'test_*.py'
+      - name: Notify Slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          HEALTHCHECK_URL: ${{ vars.HEALTHCHECK_URL }}
+          HEALTHCHECK_ENABLED: ${{ vars.HEALTHCHECK_ENABLED }}
+          MONITOR_MODE: ${{ inputs.mode }}
+        run: python3 -B ops/automation/notify.py
