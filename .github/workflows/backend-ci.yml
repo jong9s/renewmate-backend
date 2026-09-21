@@ -53,6 +53,20 @@ jobs:
       contents: read
 
     steps:
+      - name: Check OIDC token claims
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const token = await core.getIDToken('sts.amazonaws.com');
+
+            const claims = JSON.parse(
+              Buffer.from(token.split('.')[1], 'base64url').toString()
+            );
+
+            core.info(`Issuer: ${claims.iss}`);
+            core.info(`Audience: ${claims.aud}`);
+            core.info(`Subject: ${claims.sub}`);
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
