@@ -2,7 +2,7 @@ name: Portfolio Alerts
 
 on:
   workflow_run:
-    workflows: [Backend CI]
+    workflows: [Backend CI, EC2 Log Alerts]
     types: [completed]
   schedule:
     - cron: '17 */6 * * *'

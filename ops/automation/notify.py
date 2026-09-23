@@ -1,7 +1,9 @@
 """Dependency-free notifier. Never forwards raw logs or response bodies."""
 
 import json
+import base64
 import os
+import re
 import sys
 import time
 from datetime import datetime, timezone
@@ -56,6 +58,28 @@ def payload(summary, timestamp, link):
     }
 
 
+def log_summary(encoded):
+    try:
+        data = json.loads(base64.b64decode(encoded, validate=True))
+        errors = data["error_count"]
+        scanned = data["scanned_lines"]
+        if not isinstance(errors, int) or errors < 1 or not isinstance(scanned, int):
+            raise ValueError("Invalid log summary")
+        types = []
+        for item in data.get("exception_types", [])[:5]:
+            name = item["name"]
+            count = item["count"]
+            if (not isinstance(name, str)
+                    or not re.fullmatch(r"[A-Za-z_$][\w$]*(?:Exception|Error)", name)
+                    or not isinstance(count, int)):
+                raise ValueError("Invalid exception summary")
+            types.append(f"{name} ({count})")
+        suffix = f" Types: {', '.join(types)}." if types else ""
+        return f"EC2 Spring log scan found {errors} ERROR entries in {scanned} lines.{suffix}"
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+        raise ValueError("Invalid EC2 log summary") from None
+
+
 def send(message, webhook, fetch=request):
     url = urlsplit(webhook)
     if (url.scheme != "https" or url.netloc != "hooks.slack.com"
@@ -75,13 +99,18 @@ def main():
     event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
     now = datetime.now(timezone.utc).isoformat()
     run_link = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{os.environ['GITHUB_RUN_ID']}"
-    if event_name == "workflow_run":
+    if os.environ.get("MONITOR_EVENT") == "ec2_logs":
+        summary = log_summary(os.environ.get("LOG_SUMMARY_B64", ""))
+    elif event_name == "workflow_run":
         run = event["workflow_run"]
         if run.get("conclusion") not in ("failure", "timed_out"):
             return
         if run.get("run_attempt", 1) != 1:
             return
-        summary = f"Backend CI/CD {run['conclusion']} (run {run['id']}). Open the run for failing job logs."
+        workflow = run.get("name")
+        if workflow not in ("Backend CI", "EC2 Log Alerts"):
+            workflow = "GitHub workflow"
+        summary = f"{workflow} {run['conclusion']} (run {run['id']}). Open the run for failing job logs."
         now = run.get("updated_at") or now
         run_link = f"https://github.com/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{run['id']}"
     elif event_name == "workflow_dispatch" and os.environ.get("MONITOR_MODE") == "test":
