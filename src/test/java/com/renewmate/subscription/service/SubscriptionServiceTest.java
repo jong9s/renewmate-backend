@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import org.junit.jupiter.api.DisplayName;
@@ -53,6 +54,27 @@ class SubscriptionServiceTest {
 
 	@InjectMocks
 	private SubscriptionService subscriptionService;
+
+	@Test
+	@DisplayName("구독 목록은 카테고리를 함께 조회하는 저장소 메서드를 사용한다")
+	void shouldLoadCategoriesWithSubscriptions() {
+		Long userId = 1L;
+		Subscription subscription = org.mockito.Mockito.mock(Subscription.class);
+		Category category = org.mockito.Mockito.mock(Category.class);
+
+		when(subscription.getCategory()).thenReturn(category);
+		when(category.getCategoryId()).thenReturn(10L);
+		when(category.getName()).thenReturn("영상/OTT");
+		when(subscriptionRepository.findAllWithCategoryByUserId(userId))
+				.thenReturn(List.of(subscription));
+
+		var responses = subscriptionService.getSubscription(userId);
+
+		assertEquals(1, responses.size());
+		assertEquals(10L, responses.getFirst().categoryId());
+		verify(subscriptionRepository).findAllWithCategoryByUserId(userId);
+		verify(subscriptionRepository, never()).findAllByUser_UserId(userId);
+	}
 
 	@Test
 	@DisplayName("다른 사용자의 구독은 삭제할 수 없다")

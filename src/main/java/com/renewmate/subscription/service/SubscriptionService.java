@@ -147,7 +147,7 @@ public class SubscriptionService {
 	@Transactional(readOnly = true)
 	public List<SubscriptionResponse> getSubscription(Long userId){
 		
-		return subscriptionRepository.findAllByUser_UserId(userId)
+		return subscriptionRepository.findAllWithCategoryByUserId(userId)
 				.stream() // 하나씩 처리
 				.map(SubscriptionResponse::from) // 각각 다른 형태로 변환
 				.toList(); // 변환한 걸 List 로 모음

@@ -16,4 +16,6 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     boolean existsByUser_UserIdAndSubscription_SubscriptionIdAndMessage(Long userId, Long subscriptionId, String message);
     
     void deleteAllByUser_UserIdAndSubscription_SubscriptionId(Long userId, Long subscriptionId);
+
+    void deleteAllByUser_UserId(Long userId);
 }
