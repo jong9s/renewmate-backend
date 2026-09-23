@@ -33,6 +33,9 @@ public class User {
 	
 	@Column(nullable = false, length = 255)
 	private String password;
+
+	@Column(name = "google_subject", unique = true, length = 255)
+	private String googleSubject;
 	
 	@Enumerated(EnumType.STRING)
 	@Column(nullable = false, length = 20)
@@ -70,6 +73,22 @@ public class User {
 	public void updatePassword(String encodedPassword) {
 	    this.password = encodedPassword;
 	    this.updatedAt = LocalDateTime.now();
+	}
+
+	public static User createGoogle(
+			String name,
+			String email,
+			String encodedRandomPassword,
+			String googleSubject
+	) {
+		User user = create(name, email, encodedRandomPassword);
+		user.googleSubject = googleSubject;
+		return user;
+	}
+
+	public void linkGoogleSubject(String googleSubject) {
+		this.googleSubject = googleSubject;
+		this.updatedAt = LocalDateTime.now();
 	}
 	
 }

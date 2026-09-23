@@ -9,19 +9,34 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.AccessDeniedHandler;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import com.renewmate.auth.oauth.GoogleOAuthFailureHandler;
+import com.renewmate.auth.oauth.GoogleOAuthSuccessHandler;
+import com.renewmate.user.repository.UserRepository;
+
 @Configuration
 public class SecurityConfig {
 	
 	private final JwtProvider jwtProvider;
+	private final UserRepository userRepository;
+	private final GoogleOAuthSuccessHandler googleOAuthSuccessHandler;
+	private final GoogleOAuthFailureHandler googleOAuthFailureHandler;
 	
-	public SecurityConfig(JwtProvider jwtProvider) {
+	public SecurityConfig(
+			JwtProvider jwtProvider,
+			UserRepository userRepository,
+			GoogleOAuthSuccessHandler googleOAuthSuccessHandler,
+			GoogleOAuthFailureHandler googleOAuthFailureHandler
+	) {
 		this.jwtProvider = jwtProvider;
+		this.userRepository = userRepository;
+		this.googleOAuthSuccessHandler = googleOAuthSuccessHandler;
+		this.googleOAuthFailureHandler = googleOAuthFailureHandler;
 	}
 	
 	@Bean
 	public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
 		
-		JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtProvider);
+		JwtAuthenticationFilter jwtAuthenticationFilter = new JwtAuthenticationFilter(jwtProvider, userRepository);
 		
 		http
 			.csrf(csrf -> csrf.disable())
@@ -31,6 +46,8 @@ public class SecurityConfig {
 			.authorizeHttpRequests(auth -> auth
 				.requestMatchers(
 						"/api/auth/**",
+						"/oauth2/**",
+						"/login/oauth2/**",
 						"/swagger-ui/**",
 						"/v3/api-docs/**",
 						"/error",
@@ -40,10 +57,15 @@ public class SecurityConfig {
 				
 			)
 			
-		    .exceptionHandling(exception -> exception
+			.exceptionHandling(exception -> exception
 		            .authenticationEntryPoint(authenticationEntryPoint())
 		            .accessDeniedHandler(accessDeniedHandler())
 		    )
+
+			.oauth2Login(oauth -> oauth
+					.successHandler(googleOAuthSuccessHandler)
+					.failureHandler(googleOAuthFailureHandler)
+			)
 			
 			.addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
 		

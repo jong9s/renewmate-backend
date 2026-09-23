@@ -22,11 +22,13 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import com.renewmate.auth.dto.LoginRequest;
 import com.renewmate.auth.dto.LoginResponse;
 import com.renewmate.auth.dto.SignupRequest;
+import com.renewmate.auth.google.VerifiedGoogleIdentity;
 import com.renewmate.auth.service.AuthService;
 import com.renewmate.global.exception.BusinessException;
 import com.renewmate.global.exception.ErrorCode;
 import com.renewmate.global.security.JwtProvider;
 import com.renewmate.user.entity.User;
+import com.renewmate.user.entity.UserStatus;
 import com.renewmate.user.repository.UserRepository;
 
 @ExtendWith(MockitoExtension.class)
@@ -154,10 +156,11 @@ class AuthServiceTest {
 
         User user = org.mockito.Mockito.mock(User.class);
 
-        when(userRepository.findByEmail(request.email()))
+        when(userRepository.findByEmailIgnoreCase(request.email()))
                 .thenReturn(Optional.of(user));
 
         when(user.getPassword()).thenReturn("encoded-password");
+        when(user.getStatus()).thenReturn(UserStatus.ACTIVE);
         when(passwordEncoder.matches(
                 "password123",
                 "encoded-password"
@@ -200,10 +203,11 @@ class AuthServiceTest {
 
         User user = org.mockito.Mockito.mock(User.class);
 
-        when(userRepository.findByEmail(request.email()))
+        when(userRepository.findByEmailIgnoreCase(request.email()))
                 .thenReturn(Optional.of(user));
 
         when(user.getPassword()).thenReturn("encoded-password");
+        when(user.getStatus()).thenReturn(UserStatus.ACTIVE);
 
         when(passwordEncoder.matches(
                 "wrong-password",
@@ -224,5 +228,49 @@ class AuthServiceTest {
 
         verify(jwtProvider, never())
                 .createAccessToken(any(), any());
+    }
+
+    @Test
+    @DisplayName("Google 로그인 시 기존 이메일 계정에 Google 식별자를 연결한다")
+    void shouldLinkGoogleIdentityToExistingUser() {
+        VerifiedGoogleIdentity identity = new VerifiedGoogleIdentity(
+                "google-subject",
+                "test@example.com",
+                "홍길동",
+                true
+        );
+        User user = org.mockito.Mockito.mock(User.class);
+
+        when(userRepository.findByGoogleSubject(identity.subject())).thenReturn(Optional.empty());
+        when(userRepository.findByEmailIgnoreCase(identity.email())).thenReturn(Optional.of(user));
+        when(user.getGoogleSubject()).thenReturn(null);
+        when(user.getStatus()).thenReturn(UserStatus.ACTIVE);
+        User resolvedUser = authService.resolveGoogleUser(identity);
+
+        verify(user).linkGoogleSubject("google-subject");
+        assertEquals(user, resolvedUser);
+    }
+
+    @Test
+    @DisplayName("Google 로그인 시 계정이 없으면 신규 사용자를 생성한다")
+    void shouldCreateUserForNewGoogleIdentity() {
+        VerifiedGoogleIdentity identity = new VerifiedGoogleIdentity(
+                "new-google-subject",
+                "new@example.com",
+                "새 사용자",
+                true
+        );
+
+        when(userRepository.findByGoogleSubject(identity.subject())).thenReturn(Optional.empty());
+        when(userRepository.findByEmailIgnoreCase(identity.email())).thenReturn(Optional.empty());
+        when(passwordEncoder.encode(any())).thenReturn("encoded-random-password");
+        when(userRepository.save(any(User.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        User resolvedUser = authService.resolveGoogleUser(identity);
+
+        ArgumentCaptor<User> userCaptor = ArgumentCaptor.forClass(User.class);
+        verify(userRepository).save(userCaptor.capture());
+        assertEquals("new-google-subject", userCaptor.getValue().getGoogleSubject());
+        assertEquals("new@example.com", userCaptor.getValue().getEmail());
+        assertEquals(userCaptor.getValue(), resolvedUser);
     }
 }
