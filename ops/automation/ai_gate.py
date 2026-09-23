@@ -5,6 +5,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from urllib.request import Request, urlopen
+from urllib.parse import quote
 
 
 def allowed(runs, now, current_id):
@@ -29,8 +30,13 @@ def main():
     now = datetime.now(timezone.utc)
     month = now.strftime("%Y-%m-01")
     repo = os.environ["GITHUB_REPOSITORY"]
+    workflow_file = os.environ.get("AI_WORKFLOW_FILE", "ai-autofix.yml")
+    if not workflow_file.endswith(".yml") or not all(
+            character.isalnum() or character in "-_." for character in workflow_file):
+        raise ValueError("Invalid workflow file")
     # Fail closed instead of using incomplete API results.
-    url = f"https://api.github.com/repos/{repo}/actions/workflows/ai-preflight.yml/runs?per_page=100&created=%3E%3D{month}"
+    url = (f"https://api.github.com/repos/{repo}/actions/workflows/"
+           f"{quote(workflow_file)}/runs?per_page=100&created=%3E%3D{month}")
     req = Request(url, headers={
         "Authorization": f"Bearer {os.environ['GITHUB_TOKEN']}",
         "Accept": "application/vnd.github+json",
@@ -44,7 +50,7 @@ def main():
         raise ValueError("Current run missing from history; refusing to proceed")
     if not allowed(data["workflow_runs"], now, os.environ["GITHUB_RUN_ID"]):
         raise ValueError("Daily (1) or monthly (3) run limit reached")
-    print("Preflight passed. Paid AI and PR creation are NOT connected.")
+    print("Preflight passed. Paid AI remains gated by the selected workflow mode.")
 
 
 if __name__ == "__main__":

@@ -7,7 +7,12 @@ from unittest.mock import Mock, patch
 from urllib.error import URLError
 
 import ai_gate
+import check_ec2_logs
+import apply_autofix_patch
 import notify
+import prepare_incident
+import scan_container_logs
+import sanitize_logs
 
 
 class NotificationTests(unittest.TestCase):
@@ -64,6 +69,21 @@ class NotificationTests(unittest.TestCase):
         self.assertEqual(data["blocks"][0]["text"]["type"], "plain_text")
         self.assertFalse(data["unfurl_links"])
 
+    def test_sanitized_log_summary(self):
+        encoded = __import__("base64").b64encode(json.dumps({
+            "scanned_lines": 120,
+            "error_count": 2,
+            "exception_types": [{"name": "IllegalStateException", "count": 1}],
+        }).encode()).decode()
+        summary = notify.log_summary(encoded)
+        self.assertIn("2 ERROR", summary)
+        self.assertIn("IllegalStateException", summary)
+
+    def test_log_summary_rejects_raw_or_empty_content(self):
+        for encoded in ["", "not-base64", __import__("base64").b64encode(b'{"raw":"password=secret"}').decode()]:
+            with self.subTest(encoded=encoded), self.assertRaises(ValueError):
+                notify.log_summary(encoded)
+
     def invoke(self, event, event_name="workflow_run", **extra):
         env = {"GITHUB_EVENT_NAME": event_name, "GITHUB_EVENT_PATH": "unused",
                "GITHUB_REPOSITORY": "jong9s/renewmate-backend", "GITHUB_RUN_ID": "99", **extra}
@@ -100,6 +120,59 @@ class NotificationTests(unittest.TestCase):
     def test_schedule_unhealthy_notifies(self):
         with patch.object(notify, "health", return_value=(False, "not UP")):
             self.invoke({}, "schedule", HEALTHCHECK_ENABLED="true").assert_called_once()
+
+    def test_ec2_log_event_notifies_without_raw_logs(self):
+        encoded = __import__("base64").b64encode(json.dumps({
+            "scanned_lines": 10, "error_count": 1, "exception_types": []
+        }).encode()).decode()
+        send = self.invoke({}, "workflow_dispatch", MONITOR_EVENT="ec2_logs", LOG_SUMMARY_B64=encoded)
+        message = json.dumps(send.call_args.args[0])
+        self.assertIn("1 ERROR", message)
+        self.assertNotIn("password", message)
+
+
+class ContainerLogScanTests(unittest.TestCase):
+    def test_summarizes_counts_without_returning_log_text(self):
+        lines = [
+            "INFO started user@example.com\n",
+            "2026 ERROR failed password=secret java.lang.IllegalStateException: bad\n",
+            "Caused by: java.sql.SQLException: hidden detail\n",
+        ]
+        result = scan_container_logs.summarize(lines)
+        self.assertEqual(result["scanned_lines"], 3)
+        self.assertEqual(result["error_count"], 1)
+        self.assertEqual(result["exception_types"][0], {"name": "IllegalStateException", "count": 1})
+        self.assertNotIn("secret", json.dumps(result))
+        self.assertNotIn("email", json.dumps(result))
+
+    def test_validates_remote_summary_shape(self):
+        summary = {"scanned_lines": 1, "error_count": 0, "exception_types": []}
+        self.assertEqual(check_ec2_logs.validate_summary(summary), summary)
+        for invalid in [{}, {**summary, "raw": "secret"}, {**summary, "error_count": -1}]:
+            with self.subTest(invalid=invalid), self.assertRaises(ValueError):
+                check_ec2_logs.validate_summary(invalid)
+
+    def test_ssm_scan_returns_only_validated_summary(self):
+        summary = {"scanned_lines": 25, "error_count": 1,
+                   "exception_types": [{"name": "RuntimeException", "count": 1}]}
+        responses = [
+            json.dumps({"Command": {"CommandId": "command-1"}}),
+            json.dumps({"Status": "Pending"}),
+            json.dumps({"Status": "Success", "StandardOutputContent": json.dumps(summary)}),
+        ]
+        aws_call = Mock(side_effect=responses)
+        result = check_ec2_logs.scan("i-07a88d17c5a0e1a4d", aws_call, Mock())
+        self.assertEqual(result, summary)
+        self.assertEqual(aws_call.call_count, 3)
+
+    def test_ssm_failure_does_not_return_stderr(self):
+        responses = [
+            json.dumps({"Command": {"CommandId": "command-1"}}),
+            json.dumps({"Status": "Failed", "StandardErrorContent": "password=secret"}),
+        ]
+        with self.assertRaises(RuntimeError) as error:
+            check_ec2_logs.scan("i-07a88d17c5a0e1a4d", Mock(side_effect=responses), Mock())
+        self.assertNotIn("secret", str(error.exception))
 
 
 class GateTests(unittest.TestCase):
@@ -155,6 +228,86 @@ class GateTests(unittest.TestCase):
         with patch.dict(os.environ, env, clear=True), patch.object(ai_gate, "urlopen", side_effect=URLError("unavailable")):
             with self.assertRaises(URLError):
                 ai_gate.main()
+
+    def test_invalid_workflow_name_blocks_before_network(self):
+        env = {"AI_AUTOFIX_ENABLED": "true", "GITHUB_RUN_ID": "99",
+               "GITHUB_REPOSITORY": "test/repo", "GITHUB_TOKEN": "fake",
+               "AI_WORKFLOW_FILE": "../unsafe.yml"}
+        with patch.dict(os.environ, env, clear=True), patch.object(ai_gate, "urlopen") as fetch:
+            with self.assertRaises(ValueError):
+                ai_gate.main()
+            fetch.assert_not_called()
+
+
+class IncidentPreparationTests(unittest.TestCase):
+    def valid_run(self):
+        return {
+            "id": 123, "name": "Backend CI", "status": "completed",
+            "conclusion": "failure", "event": "pull_request",
+            "head_repository": {"full_name": "jong9s/renewmate-backend"},
+            "head_sha": "a" * 40, "head_branch": "codex/fixture",
+        }
+
+    def test_accepts_failed_run_from_same_repository(self):
+        values = prepare_incident.validate_run(
+            self.valid_run(), "jong9s/renewmate-backend", "123"
+        )
+        self.assertEqual(values["head_sha"], "a" * 40)
+
+    def test_rejects_success_fork_and_arbitrary_branch(self):
+        mutations = [
+            {"conclusion": "success"},
+            {"head_repository": {"full_name": "attacker/fork"}},
+            {"head_branch": "feature/untrusted"},
+        ]
+        for mutation in mutations:
+            run = {**self.valid_run(), **mutation}
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                prepare_incident.validate_run(run, "jong9s/renewmate-backend", "123")
+
+
+class LogSanitizerTests(unittest.TestCase):
+    def test_redacts_common_credentials_and_email(self):
+        raw = ("user@example.com password=hunter2 token=abc123456789 "
+               "Bearer abcdefghijklmnop eyJabcdefgh.ijklmnop.qrstuvwxyz")
+        value = sanitize_logs.sanitize(raw)
+        for secret in ("user@example.com", "hunter2", "abc123456789", "abcdefghijklmnop", "eyJabcdefgh"):
+            self.assertNotIn(secret, value)
+        self.assertIn("UNTRUSTED CI LOG DATA", value)
+
+    def test_bounds_output(self):
+        value = sanitize_logs.sanitize("x" * (sanitize_logs.MAX_OUTPUT_CHARS + 100))
+        self.assertLessEqual(len(value), sanitize_logs.MAX_OUTPUT_CHARS)
+        self.assertIn("truncated", value)
+
+
+class AutofixPatchTests(unittest.TestCase):
+    def valid_proposal(self, path="src/main/java/com/renewmate/Test.java"):
+        return (
+            "```diff\n"
+            f"diff --git a/{path} b/{path}\n"
+            "--- a/src/main/java/com/renewmate/Test.java\n"
+            "+++ b/src/main/java/com/renewmate/Test.java\n"
+            "@@ -1 +1 @@\n"
+            "-old\n"
+            "+new\n"
+            "```"
+        )
+
+    def test_accepts_java_source_patch(self):
+        patch_text = apply_autofix_patch.extract_patch(self.valid_proposal())
+        self.assertIn("diff --git", patch_text)
+
+    def test_rejects_prose_config_traversal_and_binary(self):
+        invalid = [
+            "Here is a fix\n" + self.valid_proposal(),
+            self.valid_proposal(".github/workflows/backend-ci.yml"),
+            self.valid_proposal("src/main/java/../../application.properties"),
+            "```diff\nGIT binary patch\n```",
+        ]
+        for proposal in invalid:
+            with self.subTest(proposal=proposal[:30]), self.assertRaises(ValueError):
+                apply_autofix_patch.extract_patch(proposal)
 
 
 if __name__ == "__main__":
