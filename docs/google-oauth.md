@@ -20,7 +20,7 @@ Google Console에 등록할 로컬 callback:
 http://localhost:8081/login/oauth2/code/google
 ```
 
-### 2. 백엔드 callback
+### 2. 백엔드 콜백
 
 Google은 authorization code를 다음 Spring Security endpoint로 전달한다.
 
@@ -68,10 +68,11 @@ Client Secret은 저장소나 프론트에 넣지 않는다. 설정이 누락되
 
 ## 데이터베이스
 
-로컬/운영 DB에는 다음 수동 마이그레이션을 먼저 적용한다.
+Google OAuth 스키마는 Flyway V2가 관리한다.
 
 ```text
-src/main/resources/db/manual/V20260922__google_oauth_authorization_code.sql
+src/main/resources/db/migration/V2__add_google_oauth.sql
 ```
 
-로컬 DB에는 2026-09-22 적용 완료했다. 운영 DB 적용은 배포 전 별도 승인과 백업이 필요하다.
+기존 운영 DB는 V2 baseline 전략을 사용한다. 실제 운영 적용 전에는 백업과 스키마 확인이 필요하며,
+절차는 `docs/flyway-migration-plan.md`를 따른다.

@@ -154,6 +154,33 @@ class PasswordResetServiceTest {
         verify(user, never()).updatePassword(any());
     }
 
+    @Test
+    @DisplayName("만료된 재설정 토큰은 사용할 수 없다")
+    void shouldRejectExpiredToken() throws Exception {
+        String rawToken = "expired-reset-token";
+        User user = org.mockito.Mockito.mock(User.class);
+        PasswordResetToken resetToken = PasswordResetToken.create(
+                user,
+                hash(rawToken),
+                LocalDateTime.now().minusSeconds(1)
+        );
+
+        when(passwordResetTokenRepository.findByTokenHash(hash(rawToken)))
+                .thenReturn(Optional.of(resetToken));
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> passwordResetService.confirmReset(new PasswordResetConfirmRequest(
+                        rawToken,
+                        "new-password",
+                        "new-password"
+                ))
+        );
+
+        assertEquals(ErrorCode.INVALID_PASSWORD_RESET_TOKEN, exception.getErrorCode());
+        verify(user, never()).updatePassword(any());
+    }
+
     private String hash(String value) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         return HexFormat.of().formatHex(digest.digest(value.getBytes(StandardCharsets.UTF_8)));
