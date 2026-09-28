@@ -53,7 +53,7 @@ Slack 공식 문서: https://docs.slack.dev/messaging/sending-messages-using-inc
 ## 외부 헬스 체크
 
 - GitHub runner의 `127.0.0.1`은 EC2가 아니다. 내부 주소를 HEALTHCHECK_URL로 쓰지 않는다.
-- `http://54.180.102.20/actuator/health`에서 2026-09-22 HTTP 200과 `status: UP`을 확인했다.
+- 등록한 외부 `HEALTHCHECK_URL`에서 2026-09-22 HTTP 200과 `status: UP`을 확인했다. 변경될 수 있는 Public IPv4는 문서와 workflow에 하드코딩하지 않는다.
 - `HEALTHCHECK_URL` 등록과 `HEALTHCHECK_ENABLED=true` 설정 후 수동 health workflow도 성공했다.
 - Actuator 전체를 공개하지 않는다. UP/DOWN만 노출하고 상세 DB 정보는 숨긴다. 401/404도 실패로 처리한다.
 - 장애가 계속되면 최대 하루 4회 정기 알림. 영속 중복 제거/복구 알림은 이번 단계에 포함하지 않는다.

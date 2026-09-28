@@ -1,0 +1,11 @@
+context
+QUERY: subscriptions by user (executed once)
+EXPLAIN
+-> Filter: (s.user_id = 1)  (cost=104 rows=1000) (actual time=0.0458..0.532 rows=1000 loops=1)
+    -> Table scan on s  (cost=104 rows=1000) (actual time=0.0446..0.481 rows=1000 loops=1)
+
+context
+QUERY: category by primary key (representative; repeated for 20 distinct categories)
+EXPLAIN
+-> Rows fetched before execution  (cost=0..0 rows=1) (actual time=200e-6..200e-6 rows=1 loops=1)
+

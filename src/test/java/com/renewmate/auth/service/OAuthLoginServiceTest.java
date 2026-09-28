@@ -5,6 +5,7 @@ import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import java.time.LocalDateTime;
@@ -67,6 +68,24 @@ class OAuthLoginServiceTest {
         assertEquals(43, rawCode.length());
         assertEquals(64, captor.getValue().getCodeHash().length());
         assertNotEquals(rawCode, captor.getValue().getCodeHash());
+    }
+
+    @Test
+    @DisplayName("Google이 이메일 소유권을 확인하지 않은 사용자는 거부한다")
+    void shouldRejectUnverifiedGoogleEmail() {
+        OidcUser oidcUser = org.mockito.Mockito.mock(OidcUser.class);
+        when(oidcUser.getSubject()).thenReturn("google-subject");
+        when(oidcUser.getEmail()).thenReturn("user@example.com");
+        when(oidcUser.getFullName()).thenReturn("사용자");
+        when(oidcUser.getEmailVerified()).thenReturn(false);
+
+        BusinessException exception = assertThrows(
+                BusinessException.class,
+                () -> oauthLoginService.issueExchangeCode(oidcUser)
+        );
+
+        assertEquals(ErrorCode.INVALID_GOOGLE_TOKEN, exception.getErrorCode());
+        verifyNoInteractions(authService, exchangeCodeRepository);
     }
 
     @Test
