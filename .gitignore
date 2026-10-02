@@ -87,3 +87,7 @@ Desktop.ini
 *.temp
 *.swp
 *.swo
+
+# Python automation caches
+__pycache__/
+*.py[cod]

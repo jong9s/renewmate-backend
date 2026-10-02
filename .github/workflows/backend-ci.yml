@@ -1,0 +1,167 @@
+
+name: Backend CI
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ubuntu-latest
+
+    env:
+      JWT_SECRET: renewmate-ci-jwt-secret-key-renewmate-ci-jwt-secret-key
+      JWT_ACCESS_TOKEN_EXPIRATION: 3600000
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build and test
+        run: ./gradlew clean build
+
+  deploy:
+    name: Deploy to EC2
+    needs: build
+
+    # main Push 및 CI 성공 시에만 배포
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      id-token: write
+      contents: read
+
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ap-northeast-2
+
+      - name: Deploy with SSM
+        timeout-minutes: 20
+
+        env:
+          INSTANCE_ID: ${{ vars.EC2_INSTANCE_ID }}
+          DEPLOY_SHA: ${{ github.sha }}
+
+        run: |
+          set -euo pipefail
+
+          # EC2 배포 명령을 JSON 파일로 생성
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+
+          sha = os.environ["DEPLOY_SHA"]
+
+          if not re.fullmatch(r"[0-9a-f]{40}", sha):
+              raise ValueError("Invalid deployment SHA")
+
+          script = f"""
+          set -eu
+
+          echo 'Deploying RenewMate...'
+
+          sudo -u ubuntu -H bash -lc "cd /home/ubuntu/renewmate-backend && git fetch origin main && git checkout main && git merge --ff-only {sha} && docker compose up -d --build && docker compose ps"
+
+          echo 'Checking RenewMate API health...'
+
+          for i in $(seq 1 30); do
+            if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:8081/actuator/health | grep -Eq '"status"[[:space:]]*:[[:space:]]*"UP"'; then
+              echo 'RenewMate health check passed'
+              exit 0
+            fi
+
+            echo "Waiting for API ($i/30)..."
+            sleep 5
+          done
+
+          echo 'RenewMate health check failed'
+          exit 1
+          """
+
+          with open("deploy-commands.json", "w", encoding="utf-8") as f:
+              json.dump({"commands": [script]}, f)
+          PY
+
+          # SSM을 통해 EC2에 배포 명령 전달
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --timeout-seconds 600 \
+            --parameters file://deploy-commands.json \
+            --query "Command.CommandId" \
+            --output text)
+
+          echo "SSM Command ID: $COMMAND_ID"
+
+          # 최대 약 15분 동안 배포 상태 확인
+          STATUS="Pending"
+
+          for i in $(seq 1 90); do
+            STATUS=$(aws ssm get-command-invocation \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" \
+              --output text 2>/dev/null) || STATUS="Pending"
+
+            echo "Deployment status: $STATUS ($i/90)"
+
+            case "$STATUS" in
+              Success|Failed|Cancelled|TimedOut|Cancelling)
+                break
+                ;;
+            esac
+
+            sleep 10
+          done
+
+          # 최종 상태 및 실행 로그 출력
+          aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query "{Status:Status,Stdout:StandardOutputContent,Stderr:StandardErrorContent}" \
+            --output json
+
+          FINAL_STATUS=$(aws ssm get-command-invocation \
+            --command-id "$COMMAND_ID" \
+            --instance-id "$INSTANCE_ID" \
+            --query "Status" \
+            --output text)
+
+          if [ "$FINAL_STATUS" != "Success" ]; then
+            echo "Deployment failed or did not finish: $FINAL_STATUS"
+            exit 1
+          fi
+
+          echo "Deployment and API health check completed successfully."

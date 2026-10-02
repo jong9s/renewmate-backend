@@ -1,0 +1,64 @@
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: renewmate-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "127.0.0.1:3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+    networks:
+      - renewmate-network
+
+  backend:
+    build: .
+    container_name: renewmate-backend
+    restart: unless-stopped
+    depends_on:
+      - mysql
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+
+      # MySQL
+      DB_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE}
+      DB_USERNAME: ${MYSQL_USER}
+      DB_PASSWORD: ${MYSQL_PASSWORD}
+
+      # JWT
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_ACCESS_TOKEN_EXPIRATION: ${JWT_ACCESS_TOKEN_EXPIRATION}
+
+      # Google OAuth
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+
+      # Frontend
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:5173}
+
+      # SMTP
+      MAIL_HOST: ${MAIL_HOST:-smtp.gmail.com}
+      MAIL_PORT: ${MAIL_PORT:-587}
+      MAIL_USERNAME: ${MAIL_USERNAME:-}
+      MAIL_PASSWORD: ${MAIL_PASSWORD:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+
+      # Authentication token lifetimes
+      PASSWORD_RESET_EXPIRATION_MINUTES: ${PASSWORD_RESET_EXPIRATION_MINUTES:-30}
+      OAUTH_EXCHANGE_CODE_EXPIRATION_SECONDS: ${OAUTH_EXCHANGE_CODE_EXPIRATION_SECONDS:-60}
+
+    ports:
+      - "127.0.0.1:8081:8081"
+    networks:
+      - renewmate-network
+
+volumes:
+  mysql_data:
+
+networks:
+  renewmate-network:
