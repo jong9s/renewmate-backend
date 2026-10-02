@@ -50,8 +50,8 @@ jobs:
     name: Deploy to EC2
     needs: build
 
-    # develop Push 및 CI 성공 시에만 배포
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    # main Push 및 CI 성공 시에만 배포
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
 
     runs-on: ubuntu-latest
 
@@ -92,7 +92,7 @@ jobs:
 
           echo 'Deploying RenewMate...'
 
-          sudo -u ubuntu -H bash -lc "cd /home/ubuntu/renewmate-backend && git fetch origin develop && git checkout develop && git merge --ff-only {sha} && docker compose up -d --build && docker compose ps"
+          sudo -u ubuntu -H bash -lc "cd /home/ubuntu/renewmate-backend && git fetch origin main && git checkout main && git merge --ff-only {sha} && docker compose up -d --build && docker compose ps"
 
           echo 'Checking RenewMate API health...'
 

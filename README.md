@@ -218,14 +218,14 @@ sequenceDiagram
 flowchart LR
     P[Push / Pull Request] --> T[Java 21 전체 빌드]
     T -->|PR| R[검토만 수행]
-    T -->|develop push| O[AWS OIDC]
+    T -->|main push| O[AWS OIDC]
     O --> S[SSM 배포 명령]
     S --> D[Docker Compose 빌드·실행]
     D --> H[Actuator 상태 재확인]
 ```
 
 - CI는 모든 `main`/`develop` push와 PR에서 `./gradlew clean build`를 실행합니다.
-- 배포는 `develop` push의 CI 성공 시에만 실행되며, AWS OIDC와 SSM을 사용합니다.
+- 배포는 `main` push의 CI 성공 시에만 실행되며, AWS OIDC와 SSM을 사용합니다.
 - 배포 후 EC2 내부 `127.0.0.1:8081/actuator/health`를 재시도합니다.
 
 현재 k6 시험 조건과 결과는 [`load-test/results/2026-10-02-baseline.md`](load-test/results/2026-10-02-baseline.md)와 [`load-test/results/2026-10-02-auth-concurrency.md`](load-test/results/2026-10-02-auth-concurrency.md)에 기록했습니다.
@@ -249,7 +249,7 @@ flowchart LR
 | 문제 | 원인 분석 | 해결과 검증 |
 | --- | --- | --- |
 | 목록 조회 N+1 | LAZY 카테고리를 DTO 변환 중 추가 조회 | 일반 목록에 fetch join 적용, 로컬 회귀 테스트에서 SQL 1회 확인 |
-| GitHub Actions OIDC 인증 실패 | IAM trust policy의 repository/ref subject와 workflow claim 불일치 | OIDC claim 진단 후 develop 배포 조건과 역할 신뢰 조건 정렬 |
+| GitHub Actions OIDC 인증 실패 | IAM trust policy의 repository/ref subject와 workflow claim 불일치 | OIDC claim 진단 후 main 배포 조건과 역할 신뢰 조건 정렬 |
 | SSM 배포 결과가 늦게 확정 | 명령 전송과 실제 Docker 빌드·기동 완료 시점 차이 | workflow timeout과 명령 상태 대기, 이후 Actuator 재시도 추가 |
 | Google OAuth 설정 누락 | 운영 컨테이너에 Client ID/Secret 전달 누락 | Docker 환경변수 전달, 빈 값이면 시작 실패하도록 fail-fast 구성 |
 | SMTP 메일 미발송 | Docker Compose에 SMTP 환경변수 전달 누락 | `MAIL_*` 전달과 `.env.example` 문서화, 발신 계정과 수신 사용자 주소 역할 분리 |
