@@ -230,6 +230,34 @@ flowchart LR
 
 현재 k6 시험 조건과 결과는 [`load-test/results/2026-10-02-baseline.md`](load-test/results/2026-10-02-baseline.md)와 [`load-test/results/2026-10-02-auth-concurrency.md`](load-test/results/2026-10-02-auth-concurrency.md)에 기록했습니다.
 
+## 장애 자동 대응 (Slack 알림 → AI 수정 → Draft PR)
+
+```mermaid
+flowchart LR
+    E[운영 5xx 예외] -->|repository_dispatch| W[Incident Auto-fix 워크플로우]
+    C[Backend CI 실패] -->|workflow_call| W
+    W --> S1[Slack 감지 알림]
+    W --> AI[Claude 코드 분석·수정<br/>읽기 전용 권한]
+    AI --> V[변경 경로 검증 + ./gradlew clean build]
+    V -->|통과| PR[ai-fix/* Draft PR]
+    V --> S2[Slack 결과 알림 + AI 분석 요약]
+```
+
+- 앱은 처리되지 않은 예외만 보고하고, 404·405·잘못된 요청 같은 클라이언트 오류는 제외합니다. 같은 예외 지문은 30분 동안 한 번만 보냅니다.
+- 예외 메시지의 이메일·토큰·비밀번호는 마스킹하고, 요청 본문·헤더·쿼리는 전송하지 않습니다. 서버에는 Slack Webhook이나 AI 키를 두지 않습니다.
+- AI 단계는 `contents: read` 권한만 가지고, `src/(main|test)/java/**/*.java` 밖을 수정하면 폐기됩니다. 빌드를 통과한 수정만 별도 job이 Draft PR로 올립니다. 자동 머지는 하지 않습니다.
+- 같은 이슈에 PR이 열려 있으면 다시 실행하지 않고, 하루 PR 수를 제한합니다.
+- CI 실패 감지는 Backend CI가 직접 호출하므로 어느 브랜치에서든 동작합니다. `incident-test/**` 브랜치에 일부러 실패하는 테스트를 push하면 전체 흐름을 리허설할 수 있습니다. 운영 5xx 감지와 수동 Slack 테스트는 GitHub 규칙상 기본 브랜치(main)에 반영된 뒤 동작합니다.
+
+| 설정 위치 | 이름 | 용도 |
+| --- | --- | --- |
+| GitHub Secret | `SLACK_WEBHOOK_URL` | Slack Incoming Webhook |
+| GitHub Secret | `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code CLI(헤드리스)용 Claude Pro/Max 구독 토큰 (`claude setup-token`으로 발급) |
+| GitHub Variable | `AI_AUTOFIX_ENABLED` | `true`일 때만 AI 수정 실행 |
+| GitHub Variable | `AI_AUTOFIX_DAILY_LIMIT` | 하루 AI PR 상한, 기본 3 |
+| GitHub Variable | `AI_FIX_BASE_BRANCH` | 운영 장애 PR 대상 브랜치, 기본 `develop` |
+| EC2 `.env` | `INCIDENT_REPORT_ENABLED`, `INCIDENT_GITHUB_TOKEN` | 앱의 장애 보고 on/off, 이 저장소 전용 fine-grained PAT(Contents: Read and write) |
+
 ## 테스트 전략
 
 | 계층 | 검증 내용 |
