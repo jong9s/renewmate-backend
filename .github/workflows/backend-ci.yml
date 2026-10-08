@@ -6,6 +6,8 @@ on:
     branches:
       - main
       - develop
+      # 장애 자동 대응 리허설용 (일부러 테스트를 깨뜨려 Slack 알림·AI PR 흐름 확인). 배포는 main만.
+      - 'incident-test/**'
   pull_request:
     branches:
       - main
@@ -45,6 +47,25 @@ jobs:
 
       - name: Build and test
         run: ./gradlew clean build
+
+  # 빌드·테스트 실패 시 Slack 알림 → Claude 수정 → Draft PR (incident-autofix.yml)
+  # fork PR은 시크릿이 없고 신뢰할 수 없으므로 제외한다.
+  incident:
+    name: Incident auto-fix
+    needs: build
+    if: >-
+      failure() &&
+      (github.event_name == 'push' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    uses: ./.github/workflows/incident-autofix.yml
+    with:
+      branch: ${{ github.head_ref || github.ref_name }}
+      sha: ${{ github.event.pull_request.head.sha || github.sha }}
+    secrets: inherit
 
   deploy:
     name: Deploy to EC2
