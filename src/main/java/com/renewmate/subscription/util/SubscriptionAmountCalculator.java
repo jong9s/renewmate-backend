@@ -55,7 +55,7 @@ public class SubscriptionAmountCalculator {
 
             case YEARLY ->
                     amount.divide(
-                            BigDecimal.valueOf(6L * interval),
+                            BigDecimal.valueOf(12L * interval),
                             2,
                             RoundingMode.HALF_UP
                     );
