@@ -1,7 +1,7 @@
 """Build an incident brief from a GitHub event and decide whether the AI auto-fix may run.
 
-Inputs come from repository_dispatch (production 5xx reported by the app), workflow_run
-(Backend CI failure) or workflow_dispatch (manual Slack test). Every field is treated as
+Inputs come from repository_dispatch (production 5xx reported by the app), workflow_call
+from backend-ci.yml (CI failure) or workflow_dispatch (manual Slack test). Every field is treated as
 untrusted: values are validated, masked and length-limited before they reach Slack, the
 AI prompt or a shell step. Dependency-free so it runs on a bare GitHub runner.
 """
@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -93,30 +94,49 @@ def production_incident(event, base_branch):
     }
 
 
-def ci_incident(event, repository):
-    run = event.get("workflow_run") or {}
-    run_id = str(run.get("id", ""))
-    head_branch = str(run.get("head_branch") or "")
-    head_sha = str(run.get("head_sha") or "")
+def failed_job_logs(repository, run_id):
+    """Fetch logs of failed jobs. The run is still in progress (this workflow is called
+    from it), so `gh run view --log-failed` is unavailable; per-job logs are."""
+    jobs = json.loads(gh(["api", f"repos/{repository}/actions/runs/{run_id}/jobs?per_page=50"]))
+    logs = []
+    for job in jobs.get("jobs", []):
+        if job.get("conclusion") != "failure":
+            continue
+        text = "(log could not be fetched)"
+        # 실패한 job이 막 끝난 직후에는 로그가 아직 업로드되지 않았을 수 있다.
+        for attempt in range(6):
+            try:
+                text = gh(["api", f"repos/{repository}/actions/jobs/{job['id']}/logs"])
+                break
+            except (RuntimeError, subprocess.SubprocessError):
+                if attempt < 5:
+                    time.sleep(10)
+        logs.append(f"===== job: {one_line(job.get('name'), 80)} =====\n{text}")
+    return "\n".join(logs) or "(no failed job found)"
+
+
+def ci_incident(event, repository, run_id):
+    """CI failure reported by backend-ci.yml through workflow_call."""
+    head_branch = os.environ.get("CI_BRANCH", "")
+    head_sha = os.environ.get("CI_SHA", "")
     if not run_id.isdigit() or not BRANCH.fullmatch(head_branch) or not SHA.fullmatch(head_sha):
-        raise ValueError("Invalid workflow_run metadata")
+        raise ValueError("Invalid CI metadata")
 
     fixable, skip_reason = True, ""
-    if (run.get("head_repository") or {}).get("full_name") != repository:
-        fixable, skip_reason = False, "fork에서 실행된 CI라 자동 수정하지 않음"
-    elif head_branch.startswith(FIX_BRANCH_PREFIX):
+    if head_branch.startswith(FIX_BRANCH_PREFIX):
         fixable, skip_reason = False, "AI 수정 브랜치의 실패라 재귀 실행하지 않음"
 
     try:
-        raw_log = gh(["run", "view", run_id, "--repo", repository, "--log-failed"])
-    except (RuntimeError, subprocess.SubprocessError):
+        raw_log = failed_job_logs(repository, run_id)
+    except (RuntimeError, subprocess.SubprocessError, json.JSONDecodeError):
         raw_log = "(failed job log could not be fetched)"
     tail = "\n".join(raw_log.splitlines()[-MAX_LOG_LINES:])
-    commit_message = one_line((run.get("head_commit") or {}).get("message"), 200)
+    commit_message = one_line((event.get("head_commit") or {}).get("message")
+                              or (event.get("pull_request") or {}).get("title"), 200)
 
     brief = f"""# Backend CI failure
 
-- Workflow run: {run_id} (event: {one_line(run.get("event"), 30)})
+- Workflow run: {run_id} (event: {one_line(os.environ.get("GITHUB_EVENT_NAME"), 30)})
 - Branch: {head_branch}
 - Commit: {head_sha}
 - Commit message: {commit_message}
@@ -195,10 +215,11 @@ def main():
     if not BRANCH.fullmatch(base_branch):
         raise ValueError("Invalid AI_FIX_BASE_BRANCH")
 
-    if event_name == "repository_dispatch":
+    # workflow_call에서는 event_name이 호출한 CI의 이벤트(push/pull_request)이므로 입력값으로 구분한다.
+    if os.environ.get("INCIDENT_SOURCE") == "ci":
+        incident = ci_incident(event, repository, os.environ["GITHUB_RUN_ID"])
+    elif event_name == "repository_dispatch":
         incident = production_incident(event, base_branch)
-    elif event_name == "workflow_run":
-        incident = ci_incident(event, repository)
     elif event_name == "workflow_dispatch":
         incident = test_incident(os.environ["GITHUB_RUN_ID"])
     else:
