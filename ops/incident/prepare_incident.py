@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -101,10 +102,15 @@ def failed_job_logs(repository, run_id):
     for job in jobs.get("jobs", []):
         if job.get("conclusion") != "failure":
             continue
-        try:
-            text = gh(["api", f"repos/{repository}/actions/jobs/{job['id']}/logs"])
-        except (RuntimeError, subprocess.SubprocessError):
-            text = "(log could not be fetched)"
+        text = "(log could not be fetched)"
+        # 실패한 job이 막 끝난 직후에는 로그가 아직 업로드되지 않았을 수 있다.
+        for attempt in range(6):
+            try:
+                text = gh(["api", f"repos/{repository}/actions/jobs/{job['id']}/logs"])
+                break
+            except (RuntimeError, subprocess.SubprocessError):
+                if attempt < 5:
+                    time.sleep(10)
         logs.append(f"===== job: {one_line(job.get('name'), 80)} =====\n{text}")
     return "\n".join(logs) or "(no failed job found)"
 
