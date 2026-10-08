@@ -252,7 +252,7 @@ flowchart LR
 | 설정 위치 | 이름 | 용도 |
 | --- | --- | --- |
 | GitHub Secret | `SLACK_WEBHOOK_URL` | Slack Incoming Webhook |
-| GitHub Secret | `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code Action용 Claude Pro/Max 구독 토큰 (`claude setup-token`으로 발급) |
+| GitHub Secret | `CLAUDE_CODE_OAUTH_TOKEN` | Claude Code CLI(헤드리스)용 Claude Pro/Max 구독 토큰 (`claude setup-token`으로 발급) |
 | GitHub Variable | `AI_AUTOFIX_ENABLED` | `true`일 때만 AI 수정 실행 |
 | GitHub Variable | `AI_AUTOFIX_DAILY_LIMIT` | 하루 AI PR 상한, 기본 3 |
 | GitHub Variable | `AI_FIX_BASE_BRANCH` | 운영 장애 PR 대상 브랜치, 기본 `develop` |

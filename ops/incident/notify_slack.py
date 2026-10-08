@@ -19,7 +19,7 @@ RESULT_LABELS = {
     "no_change": "ℹ️ AI가 코드 수정이 필요 없다고 판단 (환경·일시적 오류 가능성)",
     "rejected": "⛔ AI 변경이 허용 범위(src/**/*.java) 밖이라 폐기",
     "build_failed": "❌ AI 수정본이 빌드·테스트를 통과하지 못해 PR 미생성",
-    "ai_failed": "❌ AI 실행 실패 (CLAUDE_CODE_OAUTH_TOKEN 만료·구독 사용량 한도 확인)",
+    "ai_failed": "❌ AI 실행 실패 — Run 로그의 'Claude Code' 단계 확인 (토큰 만료·구독 사용량 한도 등)",
     "publish_failed": "❌ 수정본은 검증됐지만 브랜치 push 또는 PR 생성 실패",
 }
 
