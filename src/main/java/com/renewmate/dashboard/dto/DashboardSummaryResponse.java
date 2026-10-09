@@ -1,13 +1,14 @@
 package com.renewmate.dashboard.dto;
 
-import java.math.BigDecimal;
+import java.util.List;
+
+import com.renewmate.subscription.dto.CurrencyAmountResponse;
 
 public record DashboardSummaryResponse(
-		
+
         long activeSubscriptionCount,
-        BigDecimal monthlyExpectedAmount,
-        BigDecimal annualExpectedAmount,
+        List<CurrencyAmountResponse> expectedAmounts,
         long upcomingPaymentCount
-        
+
 	) {
 }

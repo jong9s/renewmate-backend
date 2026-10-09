@@ -1,6 +1,5 @@
 package com.renewmate.dashboard.service;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -35,13 +34,6 @@ public class DashboardService {
                         SubscriptionStatus.ACTIVE
                 );
 
-        BigDecimal monthlyExpectedAmount = activeSubscriptions.stream()
-                .map(subscriptionAmountCalculator::calculateMonthlyAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        BigDecimal annualExpectedAmount = monthlyExpectedAmount
-                .multiply(BigDecimal.valueOf(12));
-
         LocalDate today = LocalDate.now();
         LocalDate thirtyDaysLater = today.plusDays(30);
 
@@ -56,8 +48,7 @@ public class DashboardService {
 
         return new DashboardSummaryResponse(
                 activeSubscriptions.size(),
-                monthlyExpectedAmount,
-                annualExpectedAmount,
+                subscriptionAmountCalculator.summarizeByCurrency(activeSubscriptions),
                 upcomingPaymentCount
         );
     }
