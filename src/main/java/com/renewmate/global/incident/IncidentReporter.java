@@ -13,6 +13,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
+import jakarta.validation.ConstraintViolationException;
+
 /**
  * 처리되지 않은 서버 오류를 GitHub Actions의 장애 대응 워크플로우로 전달한다.
  * 같은 지문의 오류는 쿨다운 동안 한 번만 전달해 Slack 알림과 AI 실행이 폭주하지 않게 한다.
@@ -64,7 +66,8 @@ public class IncidentReporter {
             return errorResponse.getStatusCode().is4xxClientError();
         }
         return exception instanceof HttpMessageNotReadableException
-                || exception instanceof MethodArgumentTypeMismatchException;
+                || exception instanceof MethodArgumentTypeMismatchException
+                || exception instanceof ConstraintViolationException;
     }
 
     private boolean isCoolingDown(String fingerprint) {
