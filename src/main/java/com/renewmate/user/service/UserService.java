@@ -7,6 +7,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.renewmate.auth.dto.UserResponse;
 import com.renewmate.auth.repository.PasswordResetTokenRepository;
 import com.renewmate.auth.repository.OAuthExchangeCodeRepository;
+import com.renewmate.global.cache.EvictUserSpendingCache;
 import com.renewmate.global.exception.BusinessException;
 import com.renewmate.global.exception.ErrorCode;
 import com.renewmate.notification.repository.NotificationRepository;
@@ -79,6 +80,7 @@ public class UserService {
 	    user.updatePassword(encodedPassword);
 	}
 
+	@EvictUserSpendingCache
 	@Transactional
 	public void withdraw(Long userId, UserWithdrawalRequest request) {
 	    User user = userRepository.findById(userId)
