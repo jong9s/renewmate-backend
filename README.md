@@ -144,7 +144,29 @@ erDiagram
     }
 ```
 
-스키마는 Flyway(V1 core → V2 Google OAuth → V3 password reset)로 관리하고, Hibernate는 `ddl-auto=validate`로 엔티티와 스키마가 다르면 기동을 막습니다.
+### 스키마·기준 데이터 관리 (Flyway)
+
+| 버전 | 내용 |
+| --- | --- |
+| V1 | 핵심 테이블 (users, categories, subscriptions, notifications, user_settings) |
+| V2 | Google 로그인: `users.google_subject` 컬럼·유니크 제약, OAuth 일회용 코드 테이블 |
+| V3 | 비밀번호 재설정 토큰 테이블 |
+| V4 | 기본 카테고리 8개 (영상/OTT, 음악, 생산성, 개발, 운동/건강, 교육, 쇼핑/배송, 기타) |
+
+**Flyway를 쓰는 이유**
+
+- **데이터가 있는 운영 DB의 스키마가 계속 바뀝니다.** Google 로그인(V2)과 비밀번호 재설정(V3)을 추가하면서 기존 `users` 테이블에 컬럼과 유니크 제약을 더했습니다. `ddl-auto=update`는 무엇이 언제 적용됐는지 기록하지 않고 제약 변경이나 데이터 이전을 보장하지 않습니다. 변경은 SQL 파일로 PR에서 리뷰하고, 환경별 적용 버전은 `flyway_schema_history`로 확인합니다.
+- **이미 운영 중인 DB에 나중에 도입했습니다.** `baseline-on-migrate`와 `baseline-version=2`로 기존 DB는 V2를 기준선으로 삼아 V3부터 적용하고, 새 DB는 V1부터 적용합니다. 어느 쪽이든 최종 스키마는 같습니다.
+- **기준 데이터도 코드로 재현합니다.** 카테고리는 DB마다 손으로 넣어 왔기 때문에 새로 만든 DB에서는 카테고리 목록이 비어 있었습니다. V4는 기본 카테고리를 넣되 같은 이름이 있으면 건너뛰어 기존 ID와 구독 연결을 보존합니다.
+- **잘못된 상태로는 뜨지 않게 합니다.** Hibernate `ddl-auto=validate`는 엔티티와 스키마가 다르면 기동을 막고, `clean-disabled=true`는 운영 DB 초기화 명령을 차단합니다.
+
+**검증** (로컬 MySQL 8.0, 임시 DB, 2026-10-09)
+
+| 시나리오 | 결과 |
+| --- | --- |
+| 빈 DB | V1→V4 적용, `validate` 통과, `GET /api/categories`가 8개 반환 |
+| Flyway 도입 전 DB (V2 구조 + 수동 입력 카테고리 8개) | V2 기준선 생성 후 V3·V4 적용, 카테고리 중복 없이 8개 유지 |
+| 같은 DB 재기동 | `Schema is up to date`, 변경 없음 |
 
 ## 인증과 보안
 
@@ -246,6 +268,7 @@ flowchart LR
 | 문제 | 원인 | 해결과 검증 |
 | --- | --- | --- |
 | 구독 목록 N+1 | LAZY 카테고리를 DTO 변환 중 구독 수만큼 추가 조회 | `join fetch` 적용, Hibernate Statistics 통합 테스트로 SQL 1회 고정 |
+| 새 DB에서 카테고리 목록이 비어 있음 | 카테고리 기준 데이터를 DB마다 수동 입력, 스키마 마이그레이션과 분리 | Flyway V4 시드(이름 기준 중복 방지), 빈 DB·기존 DB·재기동 3가지로 검증 |
 | GitHub Actions OIDC 인증 실패 | IAM trust policy의 repository/ref subject와 workflow claim 불일치 | OIDC claim을 진단해 main 배포 조건과 역할 신뢰 조건을 일치 |
 | SSM 배포 결과가 늦게 확정 | 명령 전송 시점과 Docker 빌드·기동 완료 시점의 차이 | 명령 상태 폴링과 timeout, 배포 후 Actuator 헬스 체크 재시도 |
 | Google OAuth 설정 누락 | 운영 컨테이너에 Client ID/Secret 미전달 | Compose 환경변수 전달, 빈 값이면 기동 실패(fail-fast) |
@@ -315,6 +338,6 @@ Docker Compose로 실행할 때는 [`.env.example`](.env.example)을 복사해 `
 - 외부 HTTPS 도메인·인증서 적용과 운영 SMTP·Google redirect URI 검증
 - Refresh Token 발급·회전·폐기
 - 통계 API의 카테고리 N+1 해결과 캐시 적용
-- 카테고리 기본 데이터를 Flyway 데이터 마이그레이션으로 관리
+- 마이그레이션을 CI에서 실제 MySQL로 검증 (현재 테스트는 H2 + `ddl-auto=create-drop`이라 Flyway를 거치지 않음)
 - 비밀번호 재설정 메일의 비동기 발송·재시도
 - 동시 인증 요청 지연(p95 약 4.9초)의 원인 분석
