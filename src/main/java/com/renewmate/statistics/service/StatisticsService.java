@@ -1,14 +1,16 @@
 package com.renewmate.statistics.service;
 
 import java.math.BigDecimal;
-import java.math.RoundingMode;
+import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.renewmate.category.entity.Category;
+import com.renewmate.global.cache.CacheNames;
 import com.renewmate.statistics.dto.CategoryStatisticsResponse;
 import com.renewmate.statistics.dto.ServiceStatisticsResponse;
 import com.renewmate.statistics.dto.StatisticsSummaryResponse;
@@ -26,6 +28,7 @@ public class StatisticsService {
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionAmountCalculator subscriptionAmountCalculator;
 
+    @Cacheable(cacheNames = CacheNames.STATISTICS_SERVICES, key = "#userId")
     @Transactional(readOnly = true)
     public List<ServiceStatisticsResponse> getServiceStatistics(Long userId) {
 
@@ -40,51 +43,36 @@ public class StatisticsService {
 
                     return new ServiceStatisticsResponse(
                             subscription.getServiceName(),
+                            subscription.getCurrency(),
                             monthlyAmount,
                             annualAmount
                     );
                 })
-                .sorted((a, b) -> b.monthlyAmount().compareTo(a.monthlyAmount())).toList();
+                // 통화가 다른 금액은 비교할 수 없으므로 통화별로 묶은 뒤 금액 순으로 정렬
+                .sorted(Comparator.comparing(ServiceStatisticsResponse::currency)
+                        .thenComparing(ServiceStatisticsResponse::monthlyAmount, Comparator.reverseOrder()))
+                .toList();
     }
     
+    @Cacheable(cacheNames = CacheNames.STATISTICS_SUMMARY, key = "#userId")
     @Transactional(readOnly = true)
     public StatisticsSummaryResponse getSummary(Long userId) {
 
         List<Subscription> subscriptions =
                 subscriptionRepository.findAllByUser_UserIdAndStatus(userId, SubscriptionStatus.ACTIVE);
 
-        BigDecimal monthlyTotalAmount = subscriptions.stream()
-                .map(subscriptionAmountCalculator::calculateMonthlyAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        BigDecimal annualTotalAmount =
-                monthlyTotalAmount.multiply(BigDecimal.valueOf(12));
-
-        BigDecimal averageMonthlyAmount;
-
-        if (subscriptions.isEmpty()) {
-            averageMonthlyAmount = BigDecimal.ZERO;
-        } else {
-            averageMonthlyAmount = monthlyTotalAmount.divide(
-                    BigDecimal.valueOf(subscriptions.size()),
-                    2,
-                    RoundingMode.HALF_UP
-            );
-        }
-
         return new StatisticsSummaryResponse(
                 subscriptions.size(),
-                monthlyTotalAmount,
-                annualTotalAmount,
-                averageMonthlyAmount
+                subscriptionAmountCalculator.summarizeByCurrency(subscriptions)
         );
     }
     
+    @Cacheable(cacheNames = CacheNames.STATISTICS_CATEGORIES, key = "#userId")
     @Transactional(readOnly = true)
     public List<CategoryStatisticsResponse> getCategoryStatistics(Long userId) {
 
         List<Subscription> subscriptions =
-                subscriptionRepository.findAllByUser_UserIdAndStatus(
+                subscriptionRepository.findAllWithCategoryByUserIdAndStatus(
                         userId,
                         SubscriptionStatus.ACTIVE
                 );
@@ -96,28 +84,23 @@ public class StatisticsService {
                 ))
                 .entrySet()
                 .stream()
-                .map(entry -> {
+                .flatMap(entry -> {
 
                     Category category = entry.getKey();
 
-                    BigDecimal monthlyAmount = entry.getValue()
+                    // 같은 카테고리 안에서도 통화별로 따로 합산
+                    return subscriptionAmountCalculator.summarizeByCurrency(entry.getValue())
                             .stream()
-                            .map(subscriptionAmountCalculator::calculateMonthlyAmount)
-                            .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-                    BigDecimal annualAmount = monthlyAmount.multiply(BigDecimal.valueOf(12));
-
-                    return new CategoryStatisticsResponse(
-                            category.getCategoryId(),
-                            category.getName(),
-                            monthlyAmount,
-                            annualAmount
-                    );
+                            .map(total -> new CategoryStatisticsResponse(
+                                    category.getCategoryId(),
+                                    category.getName(),
+                                    total.currency(),
+                                    total.monthlyAmount(),
+                                    total.annualAmount()
+                            ));
                 })
-                .sorted((a, b) ->
-                        b.monthlyAmount()
-                                .compareTo(a.monthlyAmount())
-                )
+                .sorted(Comparator.comparing(CategoryStatisticsResponse::currency)
+                        .thenComparing(CategoryStatisticsResponse::monthlyAmount, Comparator.reverseOrder()))
                 .toList();
     }
 }
