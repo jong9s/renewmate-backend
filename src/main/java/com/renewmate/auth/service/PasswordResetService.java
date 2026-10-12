@@ -9,9 +9,8 @@ import java.time.LocalDateTime;
 import java.util.Base64;
 import java.util.HexFormat;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,7 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import com.renewmate.auth.dto.PasswordResetConfirmRequest;
 import com.renewmate.auth.dto.PasswordResetRequest;
 import com.renewmate.auth.entity.PasswordResetToken;
-import com.renewmate.auth.mail.PasswordResetMailSender;
+import com.renewmate.auth.mail.PasswordResetMailRequestedEvent;
 import com.renewmate.auth.repository.PasswordResetTokenRepository;
 import com.renewmate.global.exception.BusinessException;
 import com.renewmate.global.exception.ErrorCode;
@@ -33,12 +32,11 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public class PasswordResetService {
 
-    private static final Logger log = LoggerFactory.getLogger(PasswordResetService.class);
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final UserRepository userRepository;
     private final PasswordResetTokenRepository passwordResetTokenRepository;
-    private final PasswordResetMailSender passwordResetMailSender;
+    private final ApplicationEventPublisher eventPublisher;
     private final PasswordEncoder passwordEncoder;
 
     @Value("${app.frontend-base-url:http://localhost:5173}")
@@ -87,17 +85,15 @@ public class PasswordResetService {
         String resetLink = frontendBaseUrl + "/reset-password?token="
                 + URLEncoder.encode(rawToken, StandardCharsets.UTF_8);
 
-        try {
-            passwordResetMailSender.send(
-                    user.getEmail(),
-                    user.getName(),
-                    resetLink,
-                    expirationMinutes
-            );
-        } catch (RuntimeException exception) {
-            passwordResetTokenRepository.delete(resetToken);
-            log.error("Failed to send password reset email for userId={}", user.getUserId(), exception);
-        }
+        // 메일은 커밋 후 별도 스레드에서 보낸다 (PasswordResetMailListener: 재시도·최종 실패 처리)
+        eventPublisher.publishEvent(new PasswordResetMailRequestedEvent(
+                resetToken.getPasswordResetTokenId(),
+                user.getUserId(),
+                user.getEmail(),
+                user.getName(),
+                resetLink,
+                expirationMinutes
+        ));
     }
 
     private String createRawToken() {

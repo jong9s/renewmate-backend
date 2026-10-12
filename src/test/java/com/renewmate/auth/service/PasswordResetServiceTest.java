@@ -3,10 +3,9 @@ package com.renewmate.auth.service;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.ArgumentMatchers.contains;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -21,16 +20,18 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import com.renewmate.auth.dto.PasswordResetConfirmRequest;
 import com.renewmate.auth.dto.PasswordResetRequest;
 import com.renewmate.auth.entity.PasswordResetToken;
-import com.renewmate.auth.mail.PasswordResetMailSender;
+import com.renewmate.auth.mail.PasswordResetMailRequestedEvent;
 import com.renewmate.auth.repository.PasswordResetTokenRepository;
 import com.renewmate.global.exception.BusinessException;
 import com.renewmate.global.exception.ErrorCode;
@@ -48,7 +49,7 @@ class PasswordResetServiceTest {
     private PasswordResetTokenRepository passwordResetTokenRepository;
 
     @Mock
-    private PasswordResetMailSender passwordResetMailSender;
+    private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private PasswordEncoder passwordEncoder;
@@ -63,7 +64,7 @@ class PasswordResetServiceTest {
     }
 
     @Test
-    @DisplayName("등록된 이메일에는 원문을 저장하지 않은 일회용 재설정 토큰을 발급한다")
+    @DisplayName("등록된 이메일에는 원문을 저장하지 않은 일회용 재설정 토큰을 발급하고 메일 발송 이벤트를 발행한다")
     void shouldIssueHashedResetTokenAndSendEmail() {
         PasswordResetRequest request = new PasswordResetRequest("user@example.com");
         User user = org.mockito.Mockito.mock(User.class);
@@ -78,12 +79,16 @@ class PasswordResetServiceTest {
 
         verify(passwordResetTokenRepository).deleteAllByUser_UserId(1L);
         verify(passwordResetTokenRepository).save(any(PasswordResetToken.class));
-        verify(passwordResetMailSender).send(
-                eq("user@example.com"),
-                eq("사용자"),
-                contains("http://localhost:5173/reset-password?token="),
-                eq(30L)
-        );
+        ArgumentCaptor<PasswordResetMailRequestedEvent> eventCaptor =
+                ArgumentCaptor.forClass(PasswordResetMailRequestedEvent.class);
+        verify(eventPublisher).publishEvent(eventCaptor.capture());
+        PasswordResetMailRequestedEvent event = eventCaptor.getValue();
+        assertEquals("user@example.com", event.recipientEmail());
+        assertEquals("사용자", event.recipientName());
+        assertEquals(30L, event.expirationMinutes());
+        assertTrue(event.resetLink().startsWith("http://localhost:5173/reset-password?token="));
+        // 원문 토큰이 든 링크는 toString()(로그)에 나오지 않는다
+        assertFalse(event.toString().contains("token="));
     }
 
     @Test
@@ -96,7 +101,7 @@ class PasswordResetServiceTest {
         passwordResetService.requestReset(request);
 
         verify(passwordResetTokenRepository, never()).save(any());
-        verify(passwordResetMailSender, never()).send(any(), any(), any(), anyLong());
+        verify(eventPublisher, never()).publishEvent(any(Object.class));
     }
 
     @Test
