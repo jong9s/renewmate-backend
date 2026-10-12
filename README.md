@@ -241,12 +241,6 @@ DAU 5,000명 × 하루 20회 요청을 가정했습니다. 평균 1.16 RPS에 �
 ./gradlew clean build
 ```
 
-## 로컬 실행
-
-1. `src/main/resources/application-local.properties`에 MySQL 접속 정보와 `jwt.secret`을 넣습니다 (Git 제외).
-2. `./gradlew bootRun`으로 실행합니다.
-3. Docker Compose로 실행하려면 [`.env.example`](.env.example)을 `.env`로 복사한 뒤 `docker compose up -d --build`를 실행합니다.
-
 ## 남은 과제
 
 - 인증 개선 효과의 EC2 재측정 (현재는 로컬에서 CPU를 고정해 재현한 결과)
