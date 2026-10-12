@@ -22,13 +22,18 @@ import lombok.RequiredArgsConstructor;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-	
+
+	// 어떤 비밀번호와도 일치하지 않는 strength 10 BCrypt 해시 (존재하지 않는 계정의 로그인 비교용)
+	private static final String DUMMY_PASSWORD_HASH = "$2a$10$BCCFUFJY5AQ7B89/.qnJZOZmtyZ2rRcFt8PzTfVnrQHVRVcAxQjq.";
+
 	private final UserRepository userRepository;
 	private final PasswordEncoder passwordEncoder;
 	
 	private final JwtProvider jwtProvider;
 	
-	@Transactional
+	// 트랜잭션을 걸지 않는다: 트랜잭션 안에서 BCrypt 해싱(수십 ms)을 하면 그동안 DB 커넥션을 붙잡아,
+	// 가입이 몰릴 때 커넥션 풀이 고갈되고 다른 API가 커넥션을 기다리게 된다.
+	// 저장은 save() 한 번이라 자체 트랜잭션으로 충분하고, 중복 이메일은 DB 유니크 제약이 최종적으로 막는다.
 	public void signup(SignupRequest request) {
 		
 		// 이메일 중복 확인
@@ -51,14 +56,14 @@ public class AuthService {
 	}
 	
 	public LoginResponse login(LoginRequest request) {
-		
-		User user = userRepository.findByEmailIgnoreCase(request.email().trim())
-				.orElseThrow(() -> 
-						new BusinessException(ErrorCode.INVALID_LOGIN)
-					);
-		
-		if (user.getStatus() != UserStatus.ACTIVE
-				|| !passwordEncoder.matches(request.password(), user.getPassword())) {
+
+		User user = userRepository.findByEmailIgnoreCase(request.email().trim()).orElse(null);
+
+		// 계정이 없거나 비활성이어도 BCrypt 비교를 똑같이 수행해 응답 시간으로 가입 여부를 추측할 수 없게 한다
+		String encodedPassword = user != null ? user.getPassword() : DUMMY_PASSWORD_HASH;
+		boolean passwordMatches = passwordEncoder.matches(request.password(), encodedPassword);
+
+		if (user == null || user.getStatus() != UserStatus.ACTIVE || !passwordMatches) {
 			throw new BusinessException(ErrorCode.INVALID_LOGIN);
 		}
 
