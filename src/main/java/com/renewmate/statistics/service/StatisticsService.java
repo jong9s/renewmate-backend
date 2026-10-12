@@ -5,10 +5,12 @@ import java.math.RoundingMode;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.renewmate.category.entity.Category;
+import com.renewmate.global.cache.CacheNames;
 import com.renewmate.statistics.dto.CategoryStatisticsResponse;
 import com.renewmate.statistics.dto.ServiceStatisticsResponse;
 import com.renewmate.statistics.dto.StatisticsSummaryResponse;
@@ -26,6 +28,7 @@ public class StatisticsService {
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionAmountCalculator subscriptionAmountCalculator;
 
+    @Cacheable(cacheNames = CacheNames.STATISTICS_SERVICES, key = "#userId")
     @Transactional(readOnly = true)
     public List<ServiceStatisticsResponse> getServiceStatistics(Long userId) {
 
@@ -47,6 +50,7 @@ public class StatisticsService {
                 .sorted((a, b) -> b.monthlyAmount().compareTo(a.monthlyAmount())).toList();
     }
     
+    @Cacheable(cacheNames = CacheNames.STATISTICS_SUMMARY, key = "#userId")
     @Transactional(readOnly = true)
     public StatisticsSummaryResponse getSummary(Long userId) {
 
@@ -80,11 +84,12 @@ public class StatisticsService {
         );
     }
     
+    @Cacheable(cacheNames = CacheNames.STATISTICS_CATEGORIES, key = "#userId")
     @Transactional(readOnly = true)
     public List<CategoryStatisticsResponse> getCategoryStatistics(Long userId) {
 
         List<Subscription> subscriptions =
-                subscriptionRepository.findAllByUser_UserIdAndStatus(
+                subscriptionRepository.findAllWithCategoryByUserIdAndStatus(
                         userId,
                         SubscriptionStatus.ACTIVE
                 );
