@@ -108,7 +108,7 @@ class SpendingCacheIntegrationTest {
 
         createSubscription("Second Service", "20000");
         assertEquals(2, statisticsService.getSummary(userId).activeSubscriptionCount());
-        assertEquals(0, new BigDecimal("30000.00").compareTo(statisticsService.getSummary(userId).monthlyTotalAmount()));
+        assertEquals(0, new BigDecimal("30000.00").compareTo(statisticsService.getSummary(userId).totals().get(0).monthlyAmount()));
         assertEquals(2, dashboardService.getSummary(userId).activeSubscriptionCount());
 
         Long firstId = subscriptionId("First Service");

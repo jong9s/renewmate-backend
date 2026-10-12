@@ -21,6 +21,8 @@ import com.renewmate.category.entity.Category;
 import com.renewmate.category.repository.CategoryRepository;
 import com.renewmate.dashboard.service.DashboardService;
 import com.renewmate.statistics.dto.CategoryStatisticsResponse;
+import com.renewmate.statistics.dto.StatisticsSummaryResponse;
+import com.renewmate.subscription.dto.CurrencyAmountResponse;
 import com.renewmate.subscription.dto.SubscriptionResponse;
 import com.renewmate.subscription.entity.BillingCycle;
 import com.renewmate.subscription.entity.Currency;
@@ -118,6 +120,48 @@ class SpendingQueryIntegrationTest {
         assertEquals(3, response.size());
         assertEquals("Spending Query 3", response.get(0).categoryName());
         assertEquals(1L, statistics.getPrepareStatementCount());
+    }
+
+    @Test
+    @DisplayName("통화가 다른 구독은 환산하지 않고 통화별로 따로 합산한다")
+    void shouldSummarizeSpendingPerCurrency() {
+        Category firstCategory = categoryRepository.findAll().stream()
+                .filter(category -> category.getName().equals("Spending Query 1"))
+                .findFirst()
+                .orElseThrow();
+        subscriptionRepository.save(Subscription.create(
+                userRepository.findById(user.getUserId()).orElseThrow(),
+                firstCategory,
+                "Yearly USD",
+                new BigDecimal("120"),
+                Currency.USD,
+                BillingCycle.YEARLY,
+                1,
+                LocalDate.now().minusMonths(1),
+                LocalDate.now().plusMonths(11),
+                true,
+                3,
+                null,
+                null,
+                null
+        ));
+        entityManager.flush();
+        entityManager.clear();
+
+        StatisticsSummaryResponse summary = statisticsService.getSummary(user.getUserId());
+
+        assertEquals(4, summary.activeSubscriptionCount());
+        assertEquals(List.of(Currency.KRW, Currency.USD),
+                summary.totals().stream().map(CurrencyAmountResponse::currency).toList());
+        assertEquals(0, new BigDecimal("60000.00").compareTo(summary.totals().get(0).monthlyAmount()));
+        assertEquals(0, new BigDecimal("10.00").compareTo(summary.totals().get(1).monthlyAmount()));
+
+        List<CategoryStatisticsResponse> categories = statisticsService.getCategoryStatistics(user.getUserId());
+
+        // 같은 카테고리라도 통화가 다르면 별도 항목, KRW 항목이 먼저 온다
+        assertEquals(4, categories.size());
+        assertEquals(Currency.USD, categories.get(3).currency());
+        assertEquals("Spending Query 1", categories.get(3).categoryName());
     }
 
     @Test
