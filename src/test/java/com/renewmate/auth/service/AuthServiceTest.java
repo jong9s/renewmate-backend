@@ -4,6 +4,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.startsWith;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -228,6 +230,33 @@ class AuthServiceTest {
 
         verify(jwtProvider, never())
                 .createAccessToken(any(), any());
+    }
+
+    @Test
+    @DisplayName("없는 이메일로 로그인해도 비밀번호 비교를 수행해 응답 시간으로 가입 여부를 드러내지 않는다")
+    void shouldCompareDummyHashWhenEmailDoesNotExist() {
+        LoginRequest request = new LoginRequest("nobody@example.com", "password123");
+        when(userRepository.findByEmailIgnoreCase(request.email())).thenReturn(Optional.empty());
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> authService.login(request));
+
+        assertEquals(ErrorCode.INVALID_LOGIN, exception.getErrorCode());
+        verify(passwordEncoder).matches(eq("password123"), startsWith("$2a$10$"));
+    }
+
+    @Test
+    @DisplayName("탈퇴한 계정도 비밀번호 비교를 수행한 뒤 로그인을 거부한다")
+    void shouldCompareHashBeforeRejectingInactiveUser() {
+        LoginRequest request = new LoginRequest("left@example.com", "password123");
+        User user = org.mockito.Mockito.mock(User.class);
+        when(userRepository.findByEmailIgnoreCase(request.email())).thenReturn(Optional.of(user));
+        when(user.getPassword()).thenReturn("encoded-password");
+        when(user.getStatus()).thenReturn(UserStatus.WITHDRAWN);
+
+        BusinessException exception = assertThrows(BusinessException.class, () -> authService.login(request));
+
+        assertEquals(ErrorCode.INVALID_LOGIN, exception.getErrorCode());
+        verify(passwordEncoder).matches("password123", "encoded-password");
     }
 
     @Test

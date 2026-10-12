@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
@@ -67,7 +68,8 @@ public class IncidentReporter {
         }
         return exception instanceof HttpMessageNotReadableException
                 || exception instanceof MethodArgumentTypeMismatchException
-                || exception instanceof ConstraintViolationException;
+                || exception instanceof ConstraintViolationException
+                || exception instanceof RequestRejectedException;
     }
 
     private boolean isCoolingDown(String fingerprint) {

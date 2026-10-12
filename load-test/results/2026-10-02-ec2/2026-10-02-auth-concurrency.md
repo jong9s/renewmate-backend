@@ -8,7 +8,7 @@
 
 - 대상: AWS EC2 `t3.micro`에서 Spring Boot 앱과 MySQL이 함께 실행되는 서비스.
 - 부하 생성: Windows 로컬 PC의 k6 v2.2.0. 서버에 k6를 설치하지 않았다.
-- 스크립트: [`../scenarios/auth-concurrency.js`](../scenarios/auth-concurrency.js).
+- 스크립트: [`../scenarios/auth-concurrency.js`](../../scenarios/auth-concurrency.js).
 - 실행 방식: `per-vu-iterations`로 VU마다 요청을 1회씩 시작하는 짧은 동시 요청 시험. `maxDuration`은 2분.
 - 10명 사전 시험 후 100명 시험을 각각 실행했다. 회원가입은 VU별 고유 이메일, 같은 암호를 사용했다. 인증 정보는 결과 파일에 저장하지 않았다.
 - 100명 시험 계정 접두사: `loadtest-auth100-20261002-2131-<VU>@example.com`.
@@ -38,4 +38,4 @@
 
 ## 재현 및 주의
 
-실행에 사용한 코드는 [`../scenarios/auth-concurrency.js`](../scenarios/auth-concurrency.js)에 있다. 다음에 비교하려면 동일한 서버 사양, 계정 수, 요청 수, 워밍업 조건으로 최소 여러 차례 반복하고, 서버 CPU·메모리·스왑 입출력·DB 상태를 동시에 수집해야 한다. 특히 이번 결과만으로 bcrypt, DB 또는 메모리 중 어느 것이 지연 원인인지 단정할 수 없다.
+실행에 사용한 코드는 [`../scenarios/auth-concurrency.js`](../../scenarios/auth-concurrency.js)에 있다. 다음에 비교하려면 동일한 서버 사양, 계정 수, 요청 수, 워밍업 조건으로 최소 여러 차례 반복하고, 서버 CPU·메모리·스왑 입출력·DB 상태를 동시에 수집해야 한다. 특히 이번 결과만으로 bcrypt, DB 또는 메모리 중 어느 것이 지연 원인인지 단정할 수 없다.

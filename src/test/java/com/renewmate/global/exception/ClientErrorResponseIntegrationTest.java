@@ -102,4 +102,15 @@ class ClientErrorResponseIntegrationTest {
                 .andExpect(status().isMethodNotAllowed())
                 .andExpect(jsonPath("$.errorCode").value("METHOD_NOT_ALLOWED"));
     }
+
+    @Test
+    @DisplayName("보안 방화벽이 거부한 요청(제어 문자가 든 파라미터 이름)은 400 BAD_REQUEST를 반환한다")
+    void shouldReturnBadRequestForFirewallRejectedRequest() throws Exception {
+        // JSON 본문을 Content-Type 없이 form으로 보내면 본문 전체가 줄바꿈이 든 파라미터 이름으로 해석된다
+        mockMvc.perform(post("/api/auth/login")
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .content("{\n  \"email\": \"a@example.com\"\n}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("BAD_REQUEST"));
+    }
 }
