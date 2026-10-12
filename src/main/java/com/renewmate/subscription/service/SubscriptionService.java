@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.renewmate.category.entity.Category;
 import com.renewmate.category.repository.CategoryRepository;
+import com.renewmate.global.cache.EvictUserSpendingCache;
 import com.renewmate.global.exception.BusinessException;
 import com.renewmate.global.exception.ErrorCode;
 import com.renewmate.notification.repository.NotificationRepository;
@@ -33,6 +34,7 @@ public class SubscriptionService {
 	private final CategoryRepository categoryRepository;
 	private final NotificationRepository notificationRepository;
 	
+	@EvictUserSpendingCache
 	@Transactional
 	public void createSubscription(Long userId,	SubscriptionCreateRequest request) {
 		User user = userRepository.findById(userId)
@@ -171,6 +173,7 @@ public class SubscriptionService {
 	    return SubscriptionResponse.from(subscription);
 	}
 	
+	@EvictUserSpendingCache
 	@Transactional
 	public void updateSubscription(Long userId, Long subscriptionId, SubscriptionUpdateRequest request
 	) {
@@ -208,6 +211,7 @@ public class SubscriptionService {
 	    );
 	}
 	
+	@EvictUserSpendingCache
 	@Transactional
 	public void deleteSubscription(Long userId, Long subscriptionId) {
 
@@ -225,6 +229,7 @@ public class SubscriptionService {
 	    subscriptionRepository.delete(subscription);
 	}
 	
+	@EvictUserSpendingCache
 	@Transactional
 	public void changeStatus(Long userId, Long subscriptionId, SubscriptionStatusUpdateRequest request) {
 			Subscription subscription = subscriptionRepository.findBySubscriptionIdAndUser_UserId(subscriptionId, userId)
@@ -240,7 +245,7 @@ public class SubscriptionService {
 		LocalDate today = LocalDate.now();
 		LocalDate endDate = today.plusDays(days);
 		
-		return subscriptionRepository.findAllByUser_UserIdAndStatusAndNextBillingDateBetween(userId, SubscriptionStatus.ACTIVE, today, endDate)
+		return subscriptionRepository.findAllWithCategoryByUserIdAndStatusAndNextBillingDateBetween(userId, SubscriptionStatus.ACTIVE, today, endDate)
 				.stream()
 				.map(SubscriptionResponse::from)
 				.toList();

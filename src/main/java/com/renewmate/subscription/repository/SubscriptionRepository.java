@@ -29,13 +29,43 @@ public interface SubscriptionRepository extends JpaRepository<Subscription, Long
 			Long userId
 	);
 	
-	List<Subscription> findAllByUser_UserIdAndStatusAndNextBillingDateBetween(
-            Long userId,
-            SubscriptionStatus status,
-            LocalDate startDate,
-            LocalDate endDate
-    );
-	
+	// 결제 예정 목록 응답에 카테고리 이름이 필요하므로 함께 조회 (카테고리가 없는 구독도 포함)
+	@Query("""
+			select subscription
+			from Subscription subscription
+			left join fetch subscription.category
+			where subscription.user.userId = :userId
+			and subscription.status = :status
+			and subscription.nextBillingDate between :startDate and :endDate
+			order by subscription.nextBillingDate asc
+			""")
+	List<Subscription> findAllWithCategoryByUserIdAndStatusAndNextBillingDateBetween(
+			@Param("userId") Long userId,
+			@Param("status") SubscriptionStatus status,
+			@Param("startDate") LocalDate startDate,
+			@Param("endDate") LocalDate endDate
+	);
+
+	long countByUser_UserIdAndStatusAndNextBillingDateBetween(
+			Long userId,
+			SubscriptionStatus status,
+			LocalDate startDate,
+			LocalDate endDate
+	);
+
+	// 카테고리별 통계용: 카테고리를 구독마다 따로 조회하지 않도록 함께 조회
+	@Query("""
+			select subscription
+			from Subscription subscription
+			left join fetch subscription.category
+			where subscription.user.userId = :userId
+			and subscription.status = :status
+			""")
+	List<Subscription> findAllWithCategoryByUserIdAndStatus(
+			@Param("userId") Long userId,
+			@Param("status") SubscriptionStatus status
+	);
+
 	List<Subscription> findAllByUser_UserIdAndStatus(
 	        Long userId,
 	        SubscriptionStatus status

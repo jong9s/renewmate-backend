@@ -1,13 +1,14 @@
 package com.renewmate.dashboard.service;
 
-import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.renewmate.dashboard.dto.DashboardSummaryResponse;
+import com.renewmate.global.cache.CacheNames;
 import com.renewmate.subscription.dto.SubscriptionResponse;
 import com.renewmate.subscription.entity.Subscription;
 import com.renewmate.subscription.entity.SubscriptionStatus;
@@ -23,6 +24,7 @@ public class DashboardService {
     private final SubscriptionRepository subscriptionRepository;
     private final SubscriptionAmountCalculator subscriptionAmountCalculator;
 
+    @Cacheable(cacheNames = CacheNames.DASHBOARD_SUMMARY, key = "#userId")
     @Transactional(readOnly = true)
     public DashboardSummaryResponse getSummary(Long userId) {
 
@@ -32,30 +34,21 @@ public class DashboardService {
                         SubscriptionStatus.ACTIVE
                 );
 
-        BigDecimal monthlyExpectedAmount = activeSubscriptions.stream()
-                .map(subscriptionAmountCalculator::calculateMonthlyAmount)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-        BigDecimal annualExpectedAmount = monthlyExpectedAmount
-                .multiply(BigDecimal.valueOf(12));
-
         LocalDate today = LocalDate.now();
         LocalDate thirtyDaysLater = today.plusDays(30);
 
         long upcomingPaymentCount =
                 subscriptionRepository
-                        .findAllByUser_UserIdAndStatusAndNextBillingDateBetween(
+                        .countByUser_UserIdAndStatusAndNextBillingDateBetween(
                                 userId,
                                 SubscriptionStatus.ACTIVE,
                                 today,
                                 thirtyDaysLater
-                        )
-                        .size();
+                        );
 
         return new DashboardSummaryResponse(
                 activeSubscriptions.size(),
-                monthlyExpectedAmount,
-                annualExpectedAmount,
+                subscriptionAmountCalculator.summarizeByCurrency(activeSubscriptions),
                 upcomingPaymentCount
         );
     }
@@ -69,9 +62,8 @@ public class DashboardService {
         LocalDate endDate = today.plusDays(30);
 
         return subscriptionRepository
-                .findAllByUser_UserIdAndStatusAndNextBillingDateBetween(userId, SubscriptionStatus.ACTIVE, today, endDate)
+                .findAllWithCategoryByUserIdAndStatusAndNextBillingDateBetween(userId, SubscriptionStatus.ACTIVE, today, endDate)
                 .stream()
-                .sorted((a, b) -> a.getNextBillingDate().compareTo(b.getNextBillingDate()))
                 .limit(limit)
                 .map(SubscriptionResponse::from)
                 .toList();
